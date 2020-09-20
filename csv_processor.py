@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime, timedelta
-from models import Season, Team, Match, League, TeamSeason, Table, TableTeam
+from models import Season, Team, Match, League, TeamSeason, Table, TableTeam, MatchResult
 
 
 def table_creation(season, date):
@@ -53,6 +53,18 @@ def process_csv_and_save_to_db(csv_file_path):
     if matches_data["Div"].iloc[0] == "E0":
         db_league, is_league_created = League.get_or_create(league_name='Premier League',
                                                             defaults={'country': 'EN', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "D1":
+        db_league, is_league_created = League.get_or_create(league_name='Bundesliga',
+                                                            defaults={'country': 'DE', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "F1":
+        db_league, is_league_created = League.get_or_create(league_name='Ligue 1',
+                                                            defaults={'country': 'FR', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "SP1":
+        db_league, is_league_created = League.get_or_create(league_name='La Liga',
+                                                            defaults={'country': 'ES', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "I1":
+        db_league, is_league_created = League.get_or_create(league_name='Serie A',
+                                                            defaults={'country': 'IT', 'division': 1})
 
     dates = matches_data["Date"]
     if 'Time' not in matches_data:
@@ -80,10 +92,10 @@ def process_csv_and_save_to_db(csv_file_path):
                 'season': db_season,
                 'full_time_home_goals': single_match_row["FTHG"],
                 'full_time_away_goals': single_match_row["FTAG"],
-                'full_time_result': single_match_row["FTR"],
+                'full_time_result': MatchResult(single_match_row["FTR"]),
                 'half_time_home_goals': single_match_row["HTHG"],
                 'half_time_away_goals': single_match_row["HTAG"],
-                'half_time_result': single_match_row["HTR"],
+                'half_time_result': MatchResult(single_match_row["HTR"]),
                 'home_team_shots': single_match_row["HS"],
                 'home_team_shots_on_target': single_match_row["HST"],
                 'home_team_woodwork_hits': single_match_row["HHW"] if 'HHW' in matches_data.columns else None,

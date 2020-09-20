@@ -1,5 +1,25 @@
+from enum import Enum
+from typing import Any, Callable
+
 from peewee import *
 from database_helper import db
+
+
+class EnumField(CharField):
+    """
+    This class enable an Enum like field for Peewee
+    """
+
+    def __init__(self, choices: Callable, *args: Any, **kwargs: Any) -> None:
+        super(CharField, self).__init__(*args, **kwargs)
+        self.choices = choices
+        self.max_length = 255
+
+    def db_value(self, value: Any) -> Any:
+        return value.value
+
+    def python_value(self, value: Any) -> Any:
+        return self.choices(type(list(self.choices)[0].value)(value))
 
 
 class BaseModel(Model):
@@ -29,6 +49,12 @@ class TeamSeason(BaseModel):
     season = ForeignKeyField(Season, on_delete='CASCADE')
 
 
+class MatchResult(Enum):
+    HOME_WIN = 'H'
+    DRAW = 'D'
+    AWAY_WIN = 'A'
+
+
 class Match(BaseModel):
     date = DateTimeField()
     home_team = ForeignKeyField(Team, on_delete='CASCADE')
@@ -36,10 +62,10 @@ class Match(BaseModel):
     season = ForeignKeyField(Season, on_delete='CASCADE')
     full_time_home_goals = IntegerField()
     full_time_away_goals = IntegerField()
-    full_time_result = CharField()
+    full_time_result = EnumField(choices=MatchResult)
     half_time_home_goals = IntegerField()
     half_time_away_goals = IntegerField()
-    half_time_result = CharField()
+    half_time_result = EnumField(choices=MatchResult)
     home_team_shots = IntegerField()
     home_team_shots_on_target = IntegerField()
     home_team_woodwork_hits = IntegerField(null=True)
