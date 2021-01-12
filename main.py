@@ -14,5 +14,5 @@ for file in only_files_in_dir:
     print(file)
     process_csv_and_save_to_db(file)
 
-create_dataset()
+dataset = create_dataset()
 
