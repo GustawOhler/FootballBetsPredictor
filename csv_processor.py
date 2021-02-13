@@ -149,8 +149,14 @@ def process_csv_and_save_to_db(csv_file_path):
     if 'Time' not in matches_data:
         matches_data['Time'] = "00:00"
     times = matches_data["Time"]
-    league_start_date = datetime.strptime(dates.iloc[0] + ' ' + times.iloc[0], "%d/%m/%Y %H:%M")
-    league_end_date = datetime.strptime(dates.iloc[-1] + ' ' + times.iloc[-1], "%d/%m/%Y %H:%M")
+    try:
+        league_start_date = datetime.strptime(dates.iloc[0] + ' ' + times.iloc[0], "%d/%m/%Y %H:%M")
+    except ValueError:
+        league_start_date = datetime.strptime(dates.iloc[0] + ' ' + times.iloc[0], "%d/%m/%y %H:%M")
+    try:
+        league_end_date = datetime.strptime(dates.iloc[-1] + ' ' + times.iloc[-1], "%d/%m/%Y %H:%M")
+    except ValueError:
+        league_end_date = datetime.strptime(dates.iloc[-1] + ' ' + times.iloc[-1], "%d/%m/%y %H:%M")
     db_season, is_season_created = Season.get_or_create(league=db_league,
                                                         years=league_start_date.strftime(
                                                             "%y") + "/" + league_end_date.strftime("%y"),
@@ -164,8 +170,13 @@ def process_csv_and_save_to_db(csv_file_path):
 
         matches_to_save = []
         for index, single_match_row in matches_data.iterrows():
+            try:
+                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"], "%d/%m/%Y %H:%M")
+            except:
+                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                               "%d/%m/%y %H:%M")
             matches_to_save.append({
-                'date': datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"], "%d/%m/%Y %H:%M"),
+                'date': match_date,
                 'home_team': Team.get(Team.name == single_match_row["HomeTeam"]),
                 'away_team': Team.get(Team.name == single_match_row["AwayTeam"]),
                 'season': db_season,
@@ -201,6 +212,9 @@ def process_csv_and_save_to_db(csv_file_path):
                     single_match_row["AvgA"] if 'AvgA' in matches_data.columns else single_match_row["BbAvA"])})
         Match.insert_many(matches_to_save).execute()
         for matchDate in matches_data["Date"].unique():
-            table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%Y"), db_league)
+            try:
+                table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%Y"), db_league)
+            except ValueError:
+                table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%y"), db_league)
         # Table for the end of the season
         table_creation(db_season, league_end_date + timedelta(days=1), db_league)

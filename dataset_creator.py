@@ -1,5 +1,7 @@
 from datetime import datetime
 import pandas as pd
+from tensorflow.python.keras.utils.np_utils import to_categorical
+
 from models import Match, Team, Table, TableTeam, MatchResult
 
 results_dict = {'H': 0, 'D': 1, 'A': 2}
@@ -32,9 +34,12 @@ def create_dataset():
                "away_team_loses_in_last_5_matches": [],
                "away_team_scored_goals_in_last_5_matches": [],
                "away_team_conceded_goals_in_last_5_matches": [],
-               "result": []}
+               "result": [], "home_odds": [], "draw_odds": [], "away_odds": []}
     root_matches = Match.select()
-    for root_match in root_matches:
+    root_matches_count = root_matches.count()
+    for index, root_match in enumerate(root_matches):
+        print("Przetwarzany rekord " + str(index + 1) + " z " + str(root_matches_count) + " czyli "
+              + str("{:.2f}".format((index + 1)*100/root_matches_count)) + "%", end="\r")
         table_before_match = Table.get(
             (Table.season == root_match.season) & (Table.date == root_match.date.date()))
         home_team_table_stats = TableTeam.get(
@@ -49,6 +54,8 @@ def create_dataset():
             (Match.date < root_match.date) &
             ((Match.home_team == root_match.away_team)
              | (Match.away_team == root_match.away_team))).order_by(Match.date.desc()).limit(5)
+        if home_last_5_matches.count() != 5 or away_last_5_matches.count() != 5 or home_team_table_stats.matches_played < 3 or away_team_table_stats.matches_played < 3:
+            continue
         dataset.get("home_position").append(home_team_table_stats.position)
         dataset.get("home_played_matches").append(home_team_table_stats.matches_played)
         dataset.get("home_wins").append(home_team_table_stats.wins)
@@ -98,11 +105,24 @@ def create_dataset():
         dataset.get("away_team_conceded_goals_in_last_5_matches").append(get_conceded_goals(away_last_5_matches,
                                                                                             root_match.away_team))
         dataset.get("result").append(results_dict[root_match.full_time_result.value])
+        dataset.get("home_odds").append(root_match.average_home_odds)
+        dataset.get("draw_odds").append(root_match.average_draw_odds)
+        dataset.get("away_odds").append(root_match.average_away_odds)
 
-    pd.DataFrame.from_dict(dataset).to_csv('dataset.csv', index=False)
+    pd_dataset = pd.DataFrame.from_dict(dataset)
+    pd_dataset.to_csv('dataset.csv', index=False)
     # print(dataset)
-    return dataset
+    return pd_dataset
 
 
 def load_dataset():
     return pd.read_csv("dataset.csv")
+
+
+def split_dataset(dataset: pd.DataFrame):
+    x = dataset.drop('result', axis='columns').drop("home_odds", axis='columns').drop("draw_odds", axis='columns')\
+        .drop("away_odds", axis='columns').to_numpy()
+    y = dataset['result'].to_numpy()
+    one_hot_y = to_categorical(y, num_classes=3)
+    odds = dataset[['home_odds', 'draw_odds', 'away_odds']].to_numpy()
+    return x, one_hot_y, odds
