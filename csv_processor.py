@@ -2,7 +2,12 @@ from typing import List, Tuple
 from collections import Counter
 import pandas as pd
 from datetime import datetime, timedelta
+
+from peewee import fn
+
 from models import Season, Team, Match, League, TeamSeason, Table, TableTeam, MatchResult
+from database_helper import db
+import traceback
 
 
 def add_points_to_tuple(home_team, away_team, home_points, away_points, home_goals, away_goals, small_table):
@@ -31,7 +36,8 @@ def process_match_to_head_to_head_table(match: Match, head_to_head_table):
 
 
 def accurate_sort_by_league(teams_with_same_points: List[TableTeam], season: Season, date, league_of_table: League):
-    if league_of_table.league_name == 'Premier League' or league_of_table.league_name == 'Ligue 1':
+    if league_of_table.league_name == 'Premier League' or league_of_table.league_name == 'Ligue 1' \
+            or league_of_table.league_name == 'Ligue 2':
         return sorted(teams_with_same_points, key=lambda x: (x.goal_difference, x.goals_scored), reverse=True)
     else:
         only_teams = [team.team for team in teams_with_same_points]
@@ -42,10 +48,13 @@ def accurate_sort_by_league(teams_with_same_points: List[TableTeam], season: Sea
             for match in matches:
                 process_match_to_head_to_head_table(match, head_to_head_table)
             tuple_to_sort = ((team, head_to_head_table[team.team]) for team in teams_with_same_points)
-            if league_of_table.league_name == 'La Liga' or league_of_table.league_name == 'Serie A':
+            if league_of_table.league_name == 'La Liga' or league_of_table.league_name == 'Segunda Division' \
+                    or league_of_table.league_name == 'Serie A' or league_of_table.league_name == 'Serie B' \
+                    or league_of_table.league_name == 'Eredivisie' or league_of_table.league_name == 'Primeira Liga':
                 sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[1][0], x[1][1], x[0].goal_difference,
                                                                      x[0].goals_scored), reverse=True)
-            elif league_of_table.league_name == 'Bundesliga':
+            elif league_of_table.league_name == 'Bundesliga' or league_of_table.league_name == 'Championship' \
+                    or league_of_table.league_name == '2. Bundesliga':
                 sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[0].goal_difference, x[0].goals_scored, x[1][0]),
                                        reverse=True)
             return [single_tuple[0] for single_tuple in sorted_tuples]
@@ -87,37 +96,26 @@ def table_creation(season, date, league):
         team_in_table = TableTeam(team=team_in_season, table=db_table, points=0, loses=0, draws=0, wins=0,
                                   goals_scored=0, goals_conceded=0, matches_played=0, goal_difference=0)
         table_teams.append(team_in_table)
-        team_matches = Match.select().where((Match.season == season) & (Match.date < date) &
-                                            ((Match.home_team == team_in_season) | (Match.away_team == team_in_season)))
-        for team_match in team_matches:
-            if team_match.home_team == team_in_season:
-                team_in_table.goals_scored += team_match.full_time_home_goals
-                team_in_table.goals_conceded += team_match.full_time_away_goals
-                team_in_table.goal_difference += team_match.full_time_home_goals - team_match.full_time_away_goals
-                team_in_table.matches_played += 1
-                if team_match.full_time_result == MatchResult.HOME_WIN:
-                    team_in_table.points += 3
-                    team_in_table.wins += 1
-                elif team_match.full_time_result == MatchResult.DRAW:
-                    team_in_table.points += 1
-                    team_in_table.draws += 1
-                elif team_match.full_time_result == MatchResult.AWAY_WIN:
-                    team_in_table.loses += 1
-            elif team_match.away_team == team_in_season:
-                team_in_table.goals_scored += team_match.full_time_away_goals
-                team_in_table.goals_conceded += team_match.full_time_home_goals
-                team_in_table.goal_difference += team_match.full_time_away_goals - team_match.full_time_home_goals
-                team_in_table.matches_played += 1
-                if team_match.full_time_result == MatchResult.HOME_WIN:
-                    team_in_table.loses += 1
-                elif team_match.full_time_result == MatchResult.DRAW:
-                    team_in_table.points += 1
-                    team_in_table.draws += 1
-                elif team_match.full_time_result == MatchResult.AWAY_WIN:
-                    team_in_table.points += 3
-                    team_in_table.wins += 1
-    # teams_in_table_sorted = sorted(table_teams, key=lambda x: (x.points, x.goal_difference, x.goals_scored),
-    #                                reverse=True)
+        matches_this_season = Match.select().where((Match.season == season) & (Match.date < date))
+        all_team_matches = matches_this_season.where((Match.home_team == team_in_season) | (Match.away_team == team_in_season))
+        team_in_table.matches_played = all_team_matches.count()
+        home_team_goals = Match.select(fn.Sum(Match.full_time_home_goals), fn.Sum(Match.full_time_away_goals)) \
+            .where((Match.season == season) & (Match.date < date) & (Match.home_team == team_in_season)).scalar(as_tuple=True)
+        away_team_goals = Match.select(fn.Sum(Match.full_time_home_goals), fn.Sum(Match.full_time_away_goals)) \
+            .where((Match.season == season) & (Match.date < date) & (Match.away_team == team_in_season)).scalar(as_tuple=True)
+        wins = matches_this_season.where(((Match.home_team == team_in_season) & (Match.full_time_result == MatchResult.HOME_WIN))
+                                         | ((Match.away_team == team_in_season) & (Match.full_time_result == MatchResult.AWAY_WIN))).count()
+        loses = matches_this_season.where(((Match.home_team == team_in_season) & (Match.full_time_result == MatchResult.AWAY_WIN))
+                                          | ((Match.away_team == team_in_season) & (Match.full_time_result == MatchResult.HOME_WIN))).count()
+        draws = matches_this_season.where(((Match.home_team == team_in_season) & (Match.full_time_result == MatchResult.DRAW))
+                                          | ((Match.away_team == team_in_season) & (Match.full_time_result == MatchResult.DRAW))).count()
+        team_in_table.wins = wins
+        team_in_table.draws = draws
+        team_in_table.loses = loses
+        team_in_table.points = wins * 3 + draws
+        team_in_table.goals_scored = (home_team_goals[0] or 0) + (away_team_goals[1] or 0)
+        team_in_table.goals_conceded = (home_team_goals[1] or 0) + (away_team_goals[0] or 0)
+        team_in_table.goal_difference = team_in_table.goals_scored - team_in_table.goals_conceded
     teams_in_table_sorted = sort_teams_in_table(table_teams, season, date, league)
     bulk_dictionary = []
     for index, sorted_team in enumerate(teams_in_table_sorted):
@@ -126,24 +124,47 @@ def table_creation(season, date, league):
     TableTeam.insert_many(bulk_dictionary).execute()
 
 
-def process_csv_and_save_to_db(csv_file_path):
-    matches_data = pd.read_csv(csv_file_path)
+def save_league_data_to_db(matches_data):
     db_league = None
     if matches_data["Div"].iloc[0] == "E0":
         db_league, is_league_created = League.get_or_create(league_name='Premier League',
                                                             defaults={'country': 'EN', 'division': 1})
+    if matches_data["Div"].iloc[0] == "E1":
+        db_league, is_league_created = League.get_or_create(league_name='Championship',
+                                                            defaults={'country': 'EN', 'division': 2})
     elif matches_data["Div"].iloc[0] == "D1":
         db_league, is_league_created = League.get_or_create(league_name='Bundesliga',
                                                             defaults={'country': 'DE', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "D2":
+        db_league, is_league_created = League.get_or_create(league_name='2. Bundesliga',
+                                                            defaults={'country': 'DE', 'division': 2})
     elif matches_data["Div"].iloc[0] == "F1":
         db_league, is_league_created = League.get_or_create(league_name='Ligue 1',
                                                             defaults={'country': 'FR', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "F2":
+        db_league, is_league_created = League.get_or_create(league_name='Ligue 2',
+                                                            defaults={'country': 'FR', 'division': 2})
     elif matches_data["Div"].iloc[0] == "SP1":
         db_league, is_league_created = League.get_or_create(league_name='La Liga',
                                                             defaults={'country': 'ES', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "SP2":
+        db_league, is_league_created = League.get_or_create(league_name='Segunda Division',
+                                                            defaults={'country': 'ES', 'division': 2})
     elif matches_data["Div"].iloc[0] == "I1":
         db_league, is_league_created = League.get_or_create(league_name='Serie A',
                                                             defaults={'country': 'IT', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "I2":
+        db_league, is_league_created = League.get_or_create(league_name='Serie B',
+                                                            defaults={'country': 'IT', 'division': 2})
+    elif matches_data["Div"].iloc[0] == "N1":
+        db_league, is_league_created = League.get_or_create(league_name='Eredivisie',
+                                                            defaults={'country': 'NL', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "B1":
+        db_league, is_league_created = League.get_or_create(league_name='Jupiler League',
+                                                            defaults={'country': 'BE', 'division': 1})
+    elif matches_data["Div"].iloc[0] == "P1":
+        db_league, is_league_created = League.get_or_create(league_name='Primeira Liga',
+                                                            defaults={'country': 'PT', 'division': 1})
 
     dates = matches_data["Date"]
     if 'Time' not in matches_data:
@@ -171,7 +192,8 @@ def process_csv_and_save_to_db(csv_file_path):
         matches_to_save = []
         for index, single_match_row in matches_data.iterrows():
             try:
-                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"], "%d/%m/%Y %H:%M")
+                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                               "%d/%m/%Y %H:%M")
             except:
                 match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
                                                "%d/%m/%y %H:%M")
@@ -218,3 +240,15 @@ def process_csv_and_save_to_db(csv_file_path):
                 table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%y"), db_league)
         # Table for the end of the season
         table_creation(db_season, league_end_date + timedelta(days=1), db_league)
+
+
+def process_csv_and_save_to_db(csv_file_path):
+    matches_data = pd.read_csv(csv_file_path)
+    with db.transaction() as txn:
+        try:
+            save_league_data_to_db(matches_data)
+            txn.commit()
+            print("League data committed to database")
+        except BaseException as e:
+            print("Transaction rolling back because of encountered exception:\n" + traceback.format_exc())
+            txn.rollback()
