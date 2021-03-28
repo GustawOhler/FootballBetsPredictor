@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
 import numpy as np
 
-
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości'}
+saved_model_location = "./NN_model"
 
 
 def plot_metric(history, metric):
@@ -45,22 +45,19 @@ def show_accuracy_for_classes(predicted_classes, actual_classes):
         all_actual_class_examples = len(current_actual_class_indexes)
         all_predicted_class_examples = len(current_predicted_class_indexes)
         print("Procent odgadniętych przykładów na wszystkie przykłady z klasą \"" + results_to_description_dict[i]
-              + "\" = {:.1f}".format(100*true_positives/all_actual_class_examples if all_actual_class_examples != 0 else 0)
+              + "\" = {:.1f}".format(100 * true_positives / all_actual_class_examples if all_actual_class_examples != 0 else 0)
               + "% (" + str(true_positives) + "/" + str(all_actual_class_examples) + ")")
         print("Ilosc falszywie przewidzianych dla klasy \"" + results_to_description_dict[i]
-              + "\" = {:.1f}".format(100*false_positives / all_predicted_class_examples if all_predicted_class_examples != 0 else 0)
+              + "\" = {:.1f}".format(100 * false_positives / all_predicted_class_examples if all_predicted_class_examples != 0 else 0)
               + "% (" + str(false_positives) + "/" + str(all_predicted_class_examples) + ")")
 
 
-def perform_nn_learning(dataset):
-    x, y, odds = split_dataset(dataset)
+def create_keras_model(dataset):
     factor = 0.0001
     rate = 0.1
+    x, y, odds = split_dataset(dataset)
 
-    # layer = keras.Normalization()
-    # layer.adapt(x)
     model_input = keras.Input(shape=(x.shape[1],))
-    # model = layer(model_input)
     model = keras.layers.BatchNormalization()(model_input)
     model = keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
@@ -79,15 +76,28 @@ def perform_nn_learning(dataset):
     model = keras.layers.Dropout(rate)(model)
     model = keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate/4)(model)
+    model = keras.layers.Dropout(rate / 4)(model)
     model = keras.layers.Dense(16, activation='relu', activity_regularizer=l2(factor))(model)
     output = keras.layers.Dense(3, activation='softmax')(model)
     model = keras.Model(inputs=model_input, outputs=output)
     model.compile(loss='binary_crossentropy',
                   optimizer='adam',
                   metrics=['accuracy'])
+    return model
 
-    history = model.fit(x, y, epochs=35, batch_size=128, verbose=1, shuffle=True, validation_split=0.15)
+
+def save_model(model):
+    model.save(saved_model_location, overwrite=True)
+
+
+def load_model():
+    return keras.models.load_model(saved_model_location)
+
+
+def perform_nn_learning(model, dataset):
+    x, y, odds = split_dataset(dataset)
+
+    history = model.fit(x, y, epochs=10, batch_size=128, verbose=1, shuffle=True, validation_split=0.1)
 
     y_prob = model.predict(x)
     y_classes = y_prob.argmax(axis=-1)
@@ -95,3 +105,5 @@ def perform_nn_learning(dataset):
     show_accuracy_for_classes(y_classes, y.argmax(axis=-1))
 
     plot_metric(history, 'loss')
+    save_model(model)
+    return model

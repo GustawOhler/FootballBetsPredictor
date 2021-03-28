@@ -3,7 +3,7 @@ from os.path import isfile, join
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_creator import create_dataset, load_dataset
-from neural_network_manager import perform_nn_learning
+from neural_network_manager import perform_nn_learning, load_model, create_keras_model
 import web_data_scraper
 from timeit import default_timer as timer
 
@@ -11,6 +11,7 @@ NEED_TO_DROP_TABLES = False
 SHOULD_LOG = False
 NEED_TO_CREATE_DATASET = False
 SHOULD_DOWNLOAD_DATA = False
+SHOULD_LOAD_MODEL_FROM_FILE = False
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
@@ -29,4 +30,9 @@ if NEED_TO_CREATE_DATASET:
 else:
     dataset = load_dataset()
 
-perform_nn_learning(dataset)
+if SHOULD_LOAD_MODEL_FROM_FILE:
+    model = load_model()
+else:
+    model = create_keras_model(dataset)
+
+perform_nn_learning(model, dataset)
