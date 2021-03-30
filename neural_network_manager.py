@@ -1,13 +1,15 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.python.keras.regularizers import l2
 import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
 import numpy as np
 
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości'}
-saved_model_location = "./NN_model"
+saved_model_location = "./NN_full_model/"
+saved_weights_location = "./NN_model_weights/checkpoint_weights"
 
 
 def plot_metric(history, metric):
@@ -52,35 +54,68 @@ def show_accuracy_for_classes(predicted_classes, actual_classes):
               + "% (" + str(false_positives) + "/" + str(all_predicted_class_examples) + ")")
 
 
-def create_keras_model(dataset):
-    factor = 0.0001
-    rate = 0.1
-    x, y, odds = split_dataset(dataset)
+def odds_loss(y_true, y_pred):
+    """
+    The function implements the custom loss function
 
-    model_input = keras.Input(shape=(x.shape[1],))
+    Inputs
+    true : a vector of dimension batch_size, 7. A label encoded version of the output and the backp1_a and backp1_b
+    pred : a vector of probabilities of dimension batch_size , 5.
+
+    Returns
+    the loss value
+    """
+    win_home_team = y_true[:, 0:1]
+    draw = y_true[:, 1:2]
+    win_away = y_true[:, 2:3]
+    no_bet = y_true[:, 3:4]
+    odds_a = y_true[:, 4:5]
+    odds_draw = y_true[:, 5:6]
+    odds_b = y_true[:, 6:7]
+    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
+                                      win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                      draw * (odds_draw - 1) + (1 - draw) * -1,
+                                      tf.zeros_like(odds_a)], axis=1)
+    return -1 * tf.mean(tf.sum(gain_loss_vector * y_pred, axis=1))
+
+
+def create_keras_model(x_train):
+    factor = 0.001
+    rate = 0.1
+
+    model_input = keras.Input(shape=(x_train.shape[1],))
     model = keras.layers.BatchNormalization()(model_input)
-    model = keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(1024, activation='relu',
+                               activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(2048, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(128, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor))(model)
+    model = keras.layers.Dense(128, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate / 4)(model)
-    model = keras.layers.Dense(16, activation='relu', activity_regularizer=l2(factor))(model)
-    output = keras.layers.Dense(3, activation='softmax')(model)
+    model = keras.layers.Dropout(rate)(model)
+    model = keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
+    output = keras.layers.Dense(4, activation='softmax')(model)
     model = keras.Model(inputs=model_input, outputs=output)
-    model.compile(loss='binary_crossentropy',
+    # loss='binary_crossentropy',
+    model.compile(loss=odds_loss,
                   optimizer='adam',
                   metrics=['accuracy'])
     return model
@@ -94,15 +129,20 @@ def load_model():
     return keras.models.load_model(saved_model_location)
 
 
-def perform_nn_learning(model, dataset):
-    x, y, odds = split_dataset(dataset)
+def perform_nn_learning(model, train_set, val_set):
+    x_train = train_set[0]
+    y_train = train_set[1]
 
-    history = model.fit(x, y, epochs=10, batch_size=128, verbose=1, shuffle=True, validation_split=0.1)
+    history = model.fit(x_train, y_train, epochs=100, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=15, verbose=1),
+                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
 
-    y_prob = model.predict(x)
+    model.load_weights(saved_weights_location)
+
+    y_prob = model.predict(val_set[0])
     y_classes = y_prob.argmax(axis=-1)
-    show_winnings(y_classes, y.argmax(axis=-1), odds)
-    show_accuracy_for_classes(y_classes, y.argmax(axis=-1))
+    show_winnings(y_classes, val_set[1].argmax(axis=-1), val_set[2])
+    show_accuracy_for_classes(y_classes, val_set[1].argmax(axis=-1))
 
     plot_metric(history, 'loss')
     save_model(model)

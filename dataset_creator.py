@@ -1,6 +1,8 @@
 from datetime import datetime
 import pandas as pd
 from tensorflow.python.keras.utils.np_utils import to_categorical
+import numpy as np
+from sklearn.model_selection import train_test_split
 
 from models import Match, Team, Table, TableTeam, MatchResult
 
@@ -39,7 +41,7 @@ def create_dataset():
     root_matches_count = root_matches.count()
     for index, root_match in enumerate(root_matches):
         print("Przetwarzany rekord " + str(index + 1) + " z " + str(root_matches_count) + " czyli "
-              + str("{:.2f}".format((index + 1)*100/root_matches_count)) + "%", end="\r")
+              + str("{:.2f}".format((index + 1) * 100 / root_matches_count)) + "%", end="\r")
         table_before_match = Table.get(
             (Table.season == root_match.season) & (Table.date == root_match.date.date()))
         home_team_table_stats = TableTeam.get(
@@ -119,10 +121,18 @@ def load_dataset():
     return pd.read_csv("dataset.csv")
 
 
-def split_dataset(dataset: pd.DataFrame):
-    x = dataset.drop('result', axis='columns').drop("home_odds", axis='columns').drop("draw_odds", axis='columns')\
+def split_dataset(dataset: pd.DataFrame, validation_split=0.2):
+    x = dataset.drop('result', axis='columns').drop("home_odds", axis='columns').drop("draw_odds", axis='columns') \
         .drop("away_odds", axis='columns').to_numpy()
     y = dataset['result'].to_numpy()
     one_hot_y = to_categorical(y, num_classes=3)
     odds = dataset[['home_odds', 'draw_odds', 'away_odds']].to_numpy()
-    return x, one_hot_y, odds
+    x_train, x_val, y_train, y_val, odds_train, odds_val = train_test_split(x, one_hot_y, odds, test_size=validation_split)
+    # validation_length = validation_split * x.shape[0]
+    # validation_idx = np.random.choice(x.shape[0], validation_length, replace=False)
+    # validation_logical_arr = np.zeros(x.shape[0], dtype=bool)
+    # validation_logical_arr[validation_idx] = True
+    # test_logical_arr = ~validation_logical_arr
+    # test_idx = [i for enumerate(test_logical_arr) ]
+    # x_val, y_val, odds_val = x[validation_idx, :], one_hot_y[validation_idx, :], odds[validation_idx, :]
+    return (x_train, y_train, odds_train), (x_val, y_val, odds_val)
