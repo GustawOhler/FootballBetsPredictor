@@ -5,7 +5,6 @@ from peewee import *
 from database_helper import db
 
 
-# todo: refactor!
 class EnumField(CharField):
     """
     This class enable an Enum like field for Peewee

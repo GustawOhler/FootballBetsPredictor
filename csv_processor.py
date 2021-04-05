@@ -15,6 +15,16 @@ class TieBreakerType(Enum):
     GOALS_THEN_H2H = 3
 
 
+class H2HTableRecord:
+    def __init__(self, points, goal_diff):
+        self.points = points
+        self.goal_diff = goal_diff
+
+    def add(self, points, goal_diff):
+        self.points = self.points + points
+        self.goal_diff = self.goal_diff + goal_diff
+
+
 tie_breaker_dict = {
     'Premier League': TieBreakerType.ONLY_GOALS,
     'Ligue 1': TieBreakerType.ONLY_GOALS,
@@ -47,48 +57,46 @@ league_name_dict = {
 }
 
 
-def add_points_to_tuple(home_team, away_team, home_points, away_points, home_goals, away_goals, small_table):
-    if home_team in small_table:
-        small_table[home_team] = (small_table[home_team][0] + home_points,
-                                  small_table[home_team][1] + home_goals - away_goals)
+def add_stats_to_h2h_records(home_team, away_team, home_points, away_points, home_goals, away_goals, h2h_table):
+    if home_team in h2h_table:
+        h2h_table[home_team].add(home_points, home_goals - away_goals)
     else:
-        small_table[home_team] = (home_points, home_goals - away_goals)
-    if away_team in small_table:
-        small_table[away_team] = (small_table[away_team][0] + away_points,
-                                  small_table[away_team][1] + away_goals - home_goals)
+        h2h_table[home_team] = H2HTableRecord(home_points, home_goals - away_goals)
+    if away_team in h2h_table:
+        h2h_table[away_team].add(away_points, away_goals - home_goals)
     else:
-        small_table[away_team] = (away_points, away_goals - home_goals)
+        h2h_table[away_team] = H2HTableRecord(away_points, away_goals - home_goals)
 
 
 def process_match_to_head_to_head_table(match: Match, head_to_head_table):
     if match.full_time_result == MatchResult.HOME_WIN:
-        add_points_to_tuple(match.home_team, match.away_team, 3, 0, match.full_time_home_goals,
-                            match.full_time_away_goals, head_to_head_table)
+        add_stats_to_h2h_records(match.home_team, match.away_team, 3, 0, match.full_time_home_goals,
+                                 match.full_time_away_goals, head_to_head_table)
     elif match.full_time_result == MatchResult.DRAW:
-        add_points_to_tuple(match.home_team, match.away_team, 1, 1, match.full_time_home_goals,
-                            match.full_time_away_goals, head_to_head_table)
+        add_stats_to_h2h_records(match.home_team, match.away_team, 1, 1, match.full_time_home_goals,
+                                 match.full_time_away_goals, head_to_head_table)
     elif match.full_time_result == MatchResult.AWAY_WIN:
-        add_points_to_tuple(match.home_team, match.away_team, 0, 3, match.full_time_home_goals,
-                            match.full_time_away_goals, head_to_head_table)
+        add_stats_to_h2h_records(match.home_team, match.away_team, 0, 3, match.full_time_home_goals,
+                                 match.full_time_away_goals, head_to_head_table)
 
 
 def accurate_sort_by_league(teams_with_same_points: List[TableTeam], season: Season, date, league_of_table: League):
     if tie_breaker_dict[league_of_table.league_name] == TieBreakerType.ONLY_GOALS:
         return sorted(teams_with_same_points, key=lambda x: (x.goal_difference, x.goals_scored), reverse=True)
     else:
-        only_teams = [team.team for team in teams_with_same_points]
-        matches = Match.select().where((Match.season == season) & (Match.date < date) &
-                                       (Match.home_team << only_teams) & (Match.away_team << only_teams))
-        if len(matches) == len(only_teams) * (len(only_teams) - 1):
+        tied_teams = [team.team for team in teams_with_same_points]
+        matches_between_tied_teams = Match.select().where((Match.season == season) & (Match.date < date)
+                                                          & (Match.home_team << tied_teams) & (Match.away_team << tied_teams))
+        if len(matches_between_tied_teams) == len(tied_teams) * (len(tied_teams) - 1):
             head_to_head_table = {}
-            for match in matches:
+            for match in matches_between_tied_teams:
                 process_match_to_head_to_head_table(match, head_to_head_table)
             tuple_to_sort = ((team, head_to_head_table[team.team]) for team in teams_with_same_points)
             if tie_breaker_dict[league_of_table.league_name] == TieBreakerType.H2H_THEN_GOALS:
-                sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[1][0], x[1][1], x[0].goal_difference,
+                sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[1].points, x[1].goal_diff, x[0].goal_difference,
                                                                      x[0].goals_scored), reverse=True)
             elif tie_breaker_dict[league_of_table.league_name] == TieBreakerType.GOALS_THEN_H2H:
-                sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[0].goal_difference, x[0].goals_scored, x[1][0]),
+                sorted_tuples = sorted(tuple_to_sort, key=lambda x: (x[0].goal_difference, x[0].goals_scored, x[1].points),
                                        reverse=True)
             return [single_tuple[0] for single_tuple in sorted_tuples]
         else:
@@ -158,46 +166,6 @@ def table_creation(season, date, league):
 
 
 def save_league_data_to_db(matches_data):
-    # db_league = None
-    # if matches_data["Div"].iloc[0] == "E0":
-    #     db_league, is_league_created = League.get_or_create(league_name='Premier League',
-    #                                                         defaults={'country': 'EN', 'division': 1})
-    # if matches_data["Div"].iloc[0] == "E1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Championship',
-    #                                                         defaults={'country': 'EN', 'division': 2})
-    # elif matches_data["Div"].iloc[0] == "D1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Bundesliga',
-    #                                                         defaults={'country': 'DE', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "D2":
-    #     db_league, is_league_created = League.get_or_create(league_name='2. Bundesliga',
-    #                                                         defaults={'country': 'DE', 'division': 2})
-    # elif matches_data["Div"].iloc[0] == "F1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Ligue 1',
-    #                                                         defaults={'country': 'FR', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "F2":
-    #     db_league, is_league_created = League.get_or_create(league_name='Ligue 2',
-    #                                                         defaults={'country': 'FR', 'division': 2})
-    # elif matches_data["Div"].iloc[0] == "SP1":
-    #     db_league, is_league_created = League.get_or_create(league_name='La Liga',
-    #                                                         defaults={'country': 'ES', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "SP2":
-    #     db_league, is_league_created = League.get_or_create(league_name='Segunda Division',
-    #                                                         defaults={'country': 'ES', 'division': 2})
-    # elif matches_data["Div"].iloc[0] == "I1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Serie A',
-    #                                                         defaults={'country': 'IT', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "I2":
-    #     db_league, is_league_created = League.get_or_create(league_name='Serie B',
-    #                                                         defaults={'country': 'IT', 'division': 2})
-    # elif matches_data["Div"].iloc[0] == "N1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Eredivisie',
-    #                                                         defaults={'country': 'NL', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "B1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Jupiler League',
-    #                                                         defaults={'country': 'BE', 'division': 1})
-    # elif matches_data["Div"].iloc[0] == "P1":
-    #     db_league, is_league_created = League.get_or_create(league_name='Primeira Liga',
-    #                                                         defaults={'country': 'PT', 'division': 1})
     db_league, is_league_created = league_name_dict[matches_data["Div"].iloc[0]]()
 
     dates = matches_data["Date"]

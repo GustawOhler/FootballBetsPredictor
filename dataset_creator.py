@@ -9,7 +9,7 @@ from models import Match, Team, Table, TableTeam, MatchResult
 results_dict = {'H': 0, 'D': 1, 'A': 2}
 
 
-# todo: refactor!
+#todo: Refactor przy okazji rozszerzania datasetu
 def get_scored_goals(matches: [Match], team: Team):
     return sum(match.full_time_home_goals for match in matches
                if match.home_team == team) + sum(match.full_time_away_goals for match in matches
