@@ -38,7 +38,6 @@ def show_winnings(predicted_classes, actual_classes, odds):
     winnings = 0.0
     for i in range(predicted_classes.shape[0]):
         # Jesli siec zdecydowala sie nie obstawiac meczu
-        # todo: czytelniej
         if predicted_classes[i] == Categories.NO_BET.value:
             continue
         elif predicted_classes[i] == actual_classes[i]:
@@ -132,12 +131,11 @@ def create_keras_model(x_train):
     model = keras.layers.Dropout(rate)(model)
     model = keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor),
                                kernel_regularizer=l2(factor))(model)
-    output = keras.layers.Dense(4, activation='softmax')(model)
+    output = keras.layers.Dense(3, activation='softmax')(model)
     model = keras.Model(inputs=model_input, outputs=output)
-    # loss='binary_crossentropy',
-    model.compile(loss=odds_loss,
+    model.compile(loss='binary_crossentropy',
                   optimizer='adam',
-                  metrics=[how_many_no_bets])
+                  metrics=['accuracy'])
     return model
 
 
@@ -151,17 +149,19 @@ def load_model():
 
 def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
-    y_train = train_set[1]
+    y_train = train_set[1][:, 0:3]
+    x_val = val_set[0]
+    y_val = val_set[1][:, 0:3]
 
-    history = model.fit(x_train, y_train, epochs=50, batch_size=256, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        callbacks=[EarlyStopping(patience=15, verbose=1),
+    history = model.fit(x_train, y_train, epochs=50, batch_size=256, verbose=1, shuffle=False, validation_data=(x_val, y_val),
+                        callbacks=[EarlyStopping(patience=5, verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
 
     model.load_weights(saved_weights_location)
 
     y_prob = model.predict(val_set[0])
     y_classes = y_prob.argmax(axis=-1)
-    val_set_y = val_set[1][:, 0:4]
+    val_set_y = val_set[1][:, 0:3]
     bets = val_set[1][:, 4:7]
     show_winnings(y_classes, val_set_y.argmax(axis=-1), bets)
     show_accuracy_for_classes(y_classes, val_set_y.argmax(axis=-1))
