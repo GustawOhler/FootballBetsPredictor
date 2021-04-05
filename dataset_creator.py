@@ -9,6 +9,7 @@ from models import Match, Team, Table, TableTeam, MatchResult
 results_dict = {'H': 0, 'D': 1, 'A': 2}
 
 
+# todo: refactor!
 def get_scored_goals(matches: [Match], team: Team):
     return sum(match.full_time_home_goals for match in matches
                if match.home_team == team) + sum(match.full_time_away_goals for match in matches
@@ -112,8 +113,7 @@ def create_dataset():
         dataset.get("away_odds").append(root_match.average_away_odds)
 
     pd_dataset = pd.DataFrame.from_dict(dataset)
-    pd_dataset.to_csv('dataset.csv', index=False)
-    # print(dataset)
+    pd_dataset.to_csv('dataset_copy.csv', index=False)
     return pd_dataset
 
 
@@ -127,12 +127,7 @@ def split_dataset(dataset: pd.DataFrame, validation_split=0.2):
     y = dataset['result'].to_numpy()
     one_hot_y = to_categorical(y, num_classes=3)
     odds = dataset[['home_odds', 'draw_odds', 'away_odds']].to_numpy()
-    x_train, x_val, y_train, y_val, odds_train, odds_val = train_test_split(x, one_hot_y, odds, test_size=validation_split)
-    # validation_length = validation_split * x.shape[0]
-    # validation_idx = np.random.choice(x.shape[0], validation_length, replace=False)
-    # validation_logical_arr = np.zeros(x.shape[0], dtype=bool)
-    # validation_logical_arr[validation_idx] = True
-    # test_logical_arr = ~validation_logical_arr
-    # test_idx = [i for enumerate(test_logical_arr) ]
-    # x_val, y_val, odds_val = x[validation_idx, :], one_hot_y[validation_idx, :], odds[validation_idx, :]
-    return (x_train, y_train, odds_train), (x_val, y_val, odds_val)
+    zero_vector = np.zeros((one_hot_y.shape[0], 1))
+    y_final = np.concatenate((one_hot_y, zero_vector, odds), axis=1)
+    x_train, x_val, y_train, y_val = train_test_split(x, y_final, test_size=validation_split)
+    return (x_train, y_train), (x_val, y_val)

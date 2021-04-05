@@ -7,11 +7,12 @@ import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
 import numpy as np
 
-results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości'}
+results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
 saved_model_location = "./NN_full_model/"
 saved_weights_location = "./NN_model_weights/checkpoint_weights"
 
 
+# todo: refactor!
 def plot_metric(history, metric):
     train_metrics = history.history[metric]
     val_metrics = history.history['val_' + metric]
@@ -28,7 +29,9 @@ def plot_metric(history, metric):
 def show_winnings(predicted_classes, actual_classes, odds):
     winnings = 0.0
     for i in range(predicted_classes.shape[0]):
-        if predicted_classes[i] == actual_classes[i]:
+        if predicted_classes[i] == 3:
+            continue
+        elif predicted_classes[i] == actual_classes[i]:
             winnings = winnings + odds[i][actual_classes[i]] - 1.0
         else:
             winnings = winnings - 1.0
@@ -52,19 +55,14 @@ def show_accuracy_for_classes(predicted_classes, actual_classes):
         print("Ilosc falszywie przewidzianych dla klasy \"" + results_to_description_dict[i]
               + "\" = {:.1f}".format(100 * false_positives / all_predicted_class_examples if all_predicted_class_examples != 0 else 0)
               + "% (" + str(false_positives) + "/" + str(all_predicted_class_examples) + ")")
+    not_bet_logical = predicted_classes_as_int == 3
+    not_bet_sum = sum(1 for logic_1 in not_bet_logical if logic_1)
+    all_classes_len = len(predicted_classes_as_int)
+    print("Ilosc nieobstawionych zakladow = {:.1f}".format(100 * not_bet_sum / all_classes_len if all_actual_class_examples != 0 else 0)
+          + "% (" + str(not_bet_sum) + "/" + str(all_classes_len) + ")")
 
 
 def odds_loss(y_true, y_pred):
-    """
-    The function implements the custom loss function
-
-    Inputs
-    true : a vector of dimension batch_size, 7. A label encoded version of the output and the backp1_a and backp1_b
-    pred : a vector of probabilities of dimension batch_size , 5.
-
-    Returns
-    the loss value
-    """
     win_home_team = y_true[:, 0:1]
     draw = y_true[:, 1:2]
     win_away = y_true[:, 2:3]
@@ -72,11 +70,16 @@ def odds_loss(y_true, y_pred):
     odds_a = y_true[:, 4:5]
     odds_draw = y_true[:, 5:6]
     odds_b = y_true[:, 6:7]
-    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
-                                      win_away * (odds_b - 1) + (1 - win_away) * -1,
+    gain_loss_vector = tf.keras.backend.concatenate([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
                                       draw * (odds_draw - 1) + (1 - draw) * -1,
-                                      tf.zeros_like(odds_a)], axis=1)
-    return -1 * tf.mean(tf.sum(gain_loss_vector * y_pred, axis=1))
+                                      win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                      tf.keras.backend.ones_like(odds_a) * -0.1], axis=1)
+    return -1 * tf.keras.backend.mean(tf.keras.backend.sum(gain_loss_vector * y_pred, axis=1))
+
+
+def how_many_no_bets(y_true, y_pred):
+    no_bet = y_pred[:, 3:4]
+    return tf.keras.backend.mean(tf.keras.backend.sum(no_bet))
 
 
 def create_keras_model(x_train):
@@ -85,8 +88,12 @@ def create_keras_model(x_train):
 
     model_input = keras.Input(shape=(x_train.shape[1],))
     model = keras.layers.BatchNormalization()(model_input)
-    model = keras.layers.Dense(1024, activation='relu',
+    model = keras.layers.Dense(2048, activation='relu',
                                activity_regularizer=l2(factor),
+                               kernel_regularizer=l2(factor))(model)
+    model = keras.layers.BatchNormalization()(model)
+    model = keras.layers.Dropout(rate)(model)
+    model = keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor),
                                kernel_regularizer=l2(factor))(model)
     model = keras.layers.BatchNormalization()(model)
     model = keras.layers.Dropout(rate)(model)
@@ -117,7 +124,7 @@ def create_keras_model(x_train):
     # loss='binary_crossentropy',
     model.compile(loss=odds_loss,
                   optimizer='adam',
-                  metrics=['accuracy'])
+                  metrics=[how_many_no_bets])
     return model
 
 
@@ -133,7 +140,7 @@ def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
 
-    history = model.fit(x_train, y_train, epochs=100, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+    history = model.fit(x_train, y_train, epochs=100, batch_size=256, verbose=1, shuffle=False, validation_data=val_set[0:2],
                         callbacks=[EarlyStopping(patience=15, verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
 
@@ -141,8 +148,10 @@ def perform_nn_learning(model, train_set, val_set):
 
     y_prob = model.predict(val_set[0])
     y_classes = y_prob.argmax(axis=-1)
-    show_winnings(y_classes, val_set[1].argmax(axis=-1), val_set[2])
-    show_accuracy_for_classes(y_classes, val_set[1].argmax(axis=-1))
+    val_set_y = val_set[1][:, 0:4]
+    bets = val_set[1][:, 4:7]
+    show_winnings(y_classes, val_set_y.argmax(axis=-1), bets)
+    show_accuracy_for_classes(y_classes, val_set_y.argmax(axis=-1))
 
     plot_metric(history, 'loss')
     save_model(model)

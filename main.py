@@ -9,32 +9,33 @@ from timeit import default_timer as timer
 
 NEED_TO_DROP_TABLES = False
 SHOULD_LOG = False
-NEED_TO_CREATE_DATASET = False
+NEED_TO_CREATE_DATASET = True
 SHOULD_DOWNLOAD_DATA = False
 SHOULD_LOAD_MODEL_FROM_FILE = False
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
+TRAIN_VALIDATION_SPLIT = 0.15
 
+# todo: Wydzielić funkcje!
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
     web_data_scraper.download_data_from_web(CSV_FOLDER_PATH)
-only_files_in_dir = [join(CSV_FOLDER_PATH, f) for f in listdir(CSV_FOLDER_PATH) if isfile(join(CSV_FOLDER_PATH, f))]
-# for file in only_files_in_dir:
-#     print(file)
-#     # start = timer()
-#     process_csv_and_save_to_db(file)
-    # end = timer()
-    # print("Execution time: " + str(end-start))
+match_csv_filepaths = [join(CSV_FOLDER_PATH, f) for f in listdir(CSV_FOLDER_PATH) if isfile(join(CSV_FOLDER_PATH, f))]
+for file in match_csv_filepaths:
+    print(file)
+    start = timer()
+    process_csv_and_save_to_db(file)
+    end = timer()
+    print("Execution time: " + str(end-start))
 
 if NEED_TO_CREATE_DATASET:
     dataset = create_dataset()
 else:
     dataset = load_dataset()
 
-
-(x_train, y_train, odds_train), (x_val, y_val, odds_val) = split_dataset(dataset, 0.15)
-if SHOULD_LOAD_MODEL_FROM_FILE:
-    model = load_model()
-else:
-    model = create_keras_model(x_train)
-
-perform_nn_learning(model, (x_train, y_train, odds_train), (x_val, y_val, odds_val))
+# (x_train, y_train), (x_val, y_val) = split_dataset(dataset, TRAIN_VALIDATION_SPLIT)
+# if SHOULD_LOAD_MODEL_FROM_FILE:
+#     model = load_model()
+# else:
+#     model = create_keras_model(x_train)
+#
+# perform_nn_learning(model, (x_train, y_train), (x_val, y_val))

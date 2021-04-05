@@ -1,7 +1,8 @@
 # Moje
 MatchesData/
 dataset.csv
-NN_model/
+NN_full_model/
+NN_model_weights/
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
