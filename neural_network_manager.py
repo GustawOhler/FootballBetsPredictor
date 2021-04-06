@@ -83,7 +83,7 @@ def odds_loss(y_true, y_pred):
     gain_loss_vector = tf.keras.backend.concatenate([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
                                                      draw * (odds_draw - 1) + (1 - draw) * -1,
                                                      win_away * (odds_b - 1) + (1 - win_away) * -1,
-                                                     tf.keras.backend.ones_like(odds_a) * -0.03], axis=1)
+                                                     tf.keras.backend.ones_like(odds_a) * -0.075], axis=1)
     return -1 * tf.keras.backend.mean(tf.keras.backend.sum(gain_loss_vector * y_pred, axis=1))
 
 
@@ -96,7 +96,7 @@ def how_many_no_bets(y_true, y_pred):
 
 
 def create_keras_model(x_train):
-    factor = 0.001
+    factor = 0.003
     rate = 0.1
 
     model_input = keras.Input(shape=(x_train.shape[1],))
@@ -153,8 +153,8 @@ def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
 
-    history = model.fit(x_train, y_train, epochs=50, batch_size=256, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        callbacks=[EarlyStopping(patience=15, verbose=1),
+    history = model.fit(x_train, y_train, epochs=250, batch_size=256, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=30, verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
 
     model.load_weights(saved_weights_location)
