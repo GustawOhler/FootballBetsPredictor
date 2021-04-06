@@ -13,8 +13,9 @@ NEED_TO_CREATE_DATASET = False
 SHOULD_DOWNLOAD_DATA = False
 SHOULD_LOAD_MODEL_FROM_FILE = False
 NEED_TO_PROCESS_CSV = False
+SHOULD_RUN_NN = False
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
-TRAIN_VALIDATION_SPLIT = 0.15
+TRAIN_VALIDATION_SPLIT = 0.2
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
@@ -33,10 +34,11 @@ if NEED_TO_CREATE_DATASET:
 else:
     dataset = load_dataset()
 
-(x_train, y_train), (x_val, y_val) = split_dataset(dataset, TRAIN_VALIDATION_SPLIT)
-if SHOULD_LOAD_MODEL_FROM_FILE:
-    model = load_model()
-else:
-    model = create_keras_model(x_train)
+if SHOULD_RUN_NN:
+    (x_train, y_train), (x_val, y_val) = split_dataset(dataset, TRAIN_VALIDATION_SPLIT)
+    if SHOULD_LOAD_MODEL_FROM_FILE:
+        model = load_model()
+    else:
+        model = create_keras_model(x_train)
 
-perform_nn_learning(model, (x_train, y_train), (x_val, y_val))
+    perform_nn_learning(model, (x_train, y_train), (x_val, y_val))
