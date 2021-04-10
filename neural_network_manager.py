@@ -1,4 +1,6 @@
 from enum import Enum
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
@@ -80,11 +82,32 @@ def odds_loss(y_true, y_pred):
     odds_a = y_true[:, 4:5]
     odds_draw = y_true[:, 5:6]
     odds_b = y_true[:, 6:7]
-    gain_loss_vector = tf.keras.backend.concatenate([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
-                                                     draw * (odds_draw - 1) + (1 - draw) * -1,
-                                                     win_away * (odds_b - 1) + (1 - win_away) * -1,
-                                                     tf.keras.backend.ones_like(odds_a) * -0.075], axis=1)
-    return -1 * tf.keras.backend.mean(tf.keras.backend.sum(gain_loss_vector * y_pred, axis=1))
+    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
+                                  draw * (odds_draw - 1) + (1 - draw) * -1,
+                                  win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                  tf.zeros_like(odds_a) * 0.0], axis=1)
+    # gain_loss_vector.numpy()
+    # tf.make_ndarray(y_pred)
+    # zerod_prediction = tf.where(
+    #     tf.not_equal(tf.reduce_max(y_pred, axis=1, keepdims=True), y_pred),
+    #     tf.zeros_like(y_pred),
+    #     y_pred
+    # )
+    # only_best = tf.where(
+    #     tf.equal(y_true[:, 0:4], 1),
+    #     y_pred,
+    #     tf.zeros_like(y_pred)
+    # )
+    #
+    # unique_class, _, count = tf.unique_with_counts(tf.math.argmax(y_pred, 1))
+    # count = count / tf.shape(y_pred)[0]
+    # penalty = tf.reduce_max(tf.where(
+    #     tf.greater_equal(tf.cast(count, tf.float32), 0.9),
+    #     tf.constant(1.0, dtype="float32"),
+    #     tf.zeros(shape=(1, 1))
+    # ))
+    # keras.backend.eval(gain_loss_vector)
+    return -1 * tf.reduce_mean(tf.reduce_sum(gain_loss_vector * y_pred, axis=1))
 
 
 def how_many_no_bets(y_true, y_pred):
@@ -95,49 +118,60 @@ def how_many_no_bets(y_true, y_pred):
     return tf.reduce_sum(tf.cast(logical, tf.float32)) * 100.0 / tf.cast(tf.shape(y_pred)[0], tf.float32)
 
 
-def create_keras_model(x_train):
-    factor = 0.003
-    rate = 0.1
+def create_NN_model(x_train):
+    factor = 0
+    rate = 0.00001
 
-    model_input = keras.Input(shape=(x_train.shape[1],))
-    model = keras.layers.BatchNormalization()(model_input)
-    model = keras.layers.Dense(2048, activation='relu',
-                               activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(2048, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(128, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    model = keras.layers.BatchNormalization()(model)
-    model = keras.layers.Dropout(rate)(model)
-    model = keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor),
-                               kernel_regularizer=l2(factor))(model)
-    output = keras.layers.Dense(4, activation='softmax')(model)
-    model = keras.Model(inputs=model_input, outputs=output)
-    # loss='binary_crossentropy',
+    model = tf.keras.models.Sequential()
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor),
+                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(8192, activation='relu', activity_regularizer=l2(factor),
+                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor),
+                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
+    # model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor),
+                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor),
+                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
+    #model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dense(16, activation='relu', activity_regularizer=l2(factor / 4),
+                                 kernel_regularizer=l2(factor / 4), kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dense(4, activation='softmax', kernel_initializer=tf.keras.initializers.he_normal()))
+    opt = keras.optimizers.Adam()
     model.compile(loss=odds_loss,
-                  optimizer='adam',
-                  metrics=[how_many_no_bets])
+                  optimizer=opt,
+                  metrics=[how_many_no_bets, odds_loss])
     return model
 
 
@@ -153,12 +187,23 @@ def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
 
-    history = model.fit(x_train, y_train, epochs=250, batch_size=256, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        callbacks=[EarlyStopping(patience=30, verbose=1),
-                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
+    history = model.fit(x_train, y_train, epochs=50, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        # callbacks=[EarlyStopping(patience=50, verbose=1, min_delta=0.0001),
+                        #            ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)]
+                        )
 
-    model.load_weights(saved_weights_location)
+    # model.load_weights(saved_weights_location)
 
+    # TODO: wydzielic do funkcji
+    print("Treningowy zbior: ")
+    y_train_prob = model.predict(x_train)
+    y_train_classes = y_train_prob.argmax(axis=-1)
+    train_set_y = y_train[:, 0:4]
+    train_bets = y_train[:, 4:7]
+    show_winnings(y_train_classes, train_set_y.argmax(axis=-1), train_bets)
+    show_accuracy_for_classes(y_train_classes, train_set_y.argmax(axis=-1))
+
+    print("Walidacyjny zbior: ")
     y_prob = model.predict(val_set[0])
     y_classes = y_prob.argmax(axis=-1)
     val_set_y = val_set[1][:, 0:4]
