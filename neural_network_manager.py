@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.python.keras.callbacks_v1 import TensorBoard
 from tensorflow.python.keras.regularizers import l2
 import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
@@ -85,29 +86,28 @@ def odds_loss(y_true, y_pred):
     gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
                                   draw * (odds_draw - 1) + (1 - draw) * -1,
                                   win_away * (odds_b - 1) + (1 - win_away) * -1,
-                                  tf.zeros_like(odds_a) * 0.0], axis=1)
-    # gain_loss_vector.numpy()
-    # tf.make_ndarray(y_pred)
-    # zerod_prediction = tf.where(
-    #     tf.not_equal(tf.reduce_max(y_pred, axis=1, keepdims=True), y_pred),
-    #     tf.zeros_like(y_pred),
-    #     y_pred
-    # )
-    # only_best = tf.where(
-    #     tf.equal(y_true[:, 0:4], 1),
-    #     y_pred,
-    #     tf.zeros_like(y_pred)
-    # )
-    #
-    # unique_class, _, count = tf.unique_with_counts(tf.math.argmax(y_pred, 1))
-    # count = count / tf.shape(y_pred)[0]
-    # penalty = tf.reduce_max(tf.where(
-    #     tf.greater_equal(tf.cast(count, tf.float32), 0.9),
-    #     tf.constant(1.0, dtype="float32"),
-    #     tf.zeros(shape=(1, 1))
-    # ))
-    # keras.backend.eval(gain_loss_vector)
+                                  tf.zeros_like(odds_a)], axis=1)
     return -1 * tf.reduce_mean(tf.reduce_sum(gain_loss_vector * y_pred, axis=1))
+
+
+def only_best_prob_odds_profit(y_true, y_pred):
+    win_home_team = y_true[:, 0:1]
+    draw = y_true[:, 1:2]
+    win_away = y_true[:, 2:3]
+    no_bet = y_true[:, 3:4]
+    odds_a = y_true[:, 4:5]
+    odds_draw = y_true[:, 5:6]
+    odds_b = y_true[:, 6:7]
+    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
+                                  draw * (odds_draw - 1) + (1 - draw) * -1,
+                                  win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                  tf.zeros_like(odds_a)], axis=1)
+    zerod_prediction = tf.where(
+        tf.not_equal(tf.reduce_max(y_pred, axis=1, keepdims=True), y_pred),
+        tf.zeros_like(y_pred),
+        tf.ones_like(y_pred)
+    )
+    return tf.reduce_mean(tf.reduce_sum(gain_loss_vector * zerod_prediction, axis=1))
 
 
 def how_many_no_bets(y_true, y_pred):
@@ -119,51 +119,39 @@ def how_many_no_bets(y_true, y_pred):
 
 
 def create_NN_model(x_train):
-    factor = 0
-    rate = 0.00001
+    factor = 0.000003
+    rate = 0.01
 
+    # tf.compat.v1.disable_eager_execution()
     model = tf.keras.models.Sequential()
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(8192, activation='relu', activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor),
                                  kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
     # model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(1024, activation='relu', activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate))
-    model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor),
                                  kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate))
+    # model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate / 2))
+    # model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate / 2))
+    # model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate / 2))
+    # model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate / 2))
+    # model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    #model.add(keras.layers.Dropout(rate / 2))
+    # model.add(keras.layers.Dropout(rate / 4))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(16, activation='relu', activity_regularizer=l2(factor / 4),
                                  kernel_regularizer=l2(factor / 4), kernel_initializer=tf.keras.initializers.he_normal()))
@@ -171,7 +159,7 @@ def create_NN_model(x_train):
     opt = keras.optimizers.Adam()
     model.compile(loss=odds_loss,
                   optimizer=opt,
-                  metrics=[how_many_no_bets, odds_loss])
+                  metrics=[how_many_no_bets, only_best_prob_odds_profit])
     return model
 
 
@@ -187,12 +175,15 @@ def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
 
-    history = model.fit(x_train, y_train, epochs=50, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        # callbacks=[EarlyStopping(patience=50, verbose=1, min_delta=0.0001),
-                        #            ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)]
+    # tf.compat.v1.disable_eager_execution()
+    history = model.fit(x_train, y_train, epochs=10, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=50, min_delta=0.0001, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
+                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_only_best_prob_odds_profit',
+                                                   mode='max', verbose=1)]
+                                   # TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_images=True, write_graph=True)]
                         )
 
-    # model.load_weights(saved_weights_location)
+    model.load_weights(saved_weights_location)
 
     # TODO: wydzielic do funkcji
     print("Treningowy zbior: ")
