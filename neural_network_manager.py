@@ -34,6 +34,8 @@ def plot_metric(history, metric):
     plt.xlabel("Epochs")
     plt.ylabel(metric)
     plt.legend(["train_" + metric, 'val_' + metric])
+    if metric == 'loss':
+        plt.ylim([0, 0.8])
     plt.show()
 
 
@@ -119,47 +121,59 @@ def how_many_no_bets(y_true, y_pred):
 
 
 def create_NN_model(x_train):
-    factor = 0.000003
-    rate = 0.01
+    factor = 0.0001
+    rate = 0.03
 
     # tf.compat.v1.disable_eager_execution()
     model = tf.keras.models.Sequential()
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(4096, activation='relu', activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(4096, activation='relu',
+                                 activity_regularizer=l2(factor/2),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(1024, activation='relu',
+                                 activity_regularizer=l2(factor/2),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(1024, activation='relu',
+                                 activity_regularizer=l2(factor/2),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(512, activation='relu', activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(256, activation='relu',
+                                 activity_regularizer=l2(factor/4),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(256, activation='relu', activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.Dense(64, activation='relu',
+                                 activity_regularizer=l2(factor / 4),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(64, activation='relu', activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 2))
+    model.add(keras.layers.Dense(32, activation='relu',
+                                 activity_regularizer=l2(factor / 6),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dropout(rate / 4))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(32, activation='relu', activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor / 2), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 4))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(16, activation='relu', activity_regularizer=l2(factor / 4),
-                                 kernel_regularizer=l2(factor / 4), kernel_initializer=tf.keras.initializers.he_normal()))
-    model.add(keras.layers.Dense(4, activation='softmax', kernel_initializer=tf.keras.initializers.he_normal()))
-    opt = keras.optimizers.Adam()
-    model.compile(loss=odds_loss,
+    model.add(keras.layers.Dense(16, activation='relu',
+                                 activity_regularizer=l2(factor / 10),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.Dense(3, activation='softmax', kernel_initializer=tf.keras.initializers.he_normal()))
+    opt = keras.optimizers.Adam(learning_rate=0.0015)
+    loss = keras.losses.binary_crossentropy()
+    model.compile(loss='binary_crossentropy',
                   optimizer=opt,
-                  metrics=[how_many_no_bets, only_best_prob_odds_profit])
+                  metrics=['accuracy'])
+    # only_best_prob_odds_profit
     return model
 
 
@@ -171,16 +185,16 @@ def load_model():
     return keras.models.load_model(saved_model_location)
 
 
-def perform_nn_learning(model, train_set, val_set):
+def perform_nn_learning(model, train_set, val_set, odds):
     x_train = train_set[0]
     y_train = train_set[1]
 
     # tf.compat.v1.disable_eager_execution()
-    history = model.fit(x_train, y_train, epochs=10, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        callbacks=[EarlyStopping(patience=50, min_delta=0.0001, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
-                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_only_best_prob_odds_profit',
-                                                   mode='max', verbose=1)]
-                                   # TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_images=True, write_graph=True)]
+    history = model.fit(x_train, y_train, epochs=50, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        # callbacks=[EarlyStopping(patience=25, min_delta=0.0001, monitor='val_accuracy', mode='max', verbose=1),
+                        #            ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_accuracy',
+                        #                            mode='max', verbose=1)]
+                        # TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_images=True, write_graph=True)]
                         )
 
     model.load_weights(saved_weights_location)
@@ -189,19 +203,16 @@ def perform_nn_learning(model, train_set, val_set):
     print("Treningowy zbior: ")
     y_train_prob = model.predict(x_train)
     y_train_classes = y_train_prob.argmax(axis=-1)
-    train_set_y = y_train[:, 0:4]
-    train_bets = y_train[:, 4:7]
-    show_winnings(y_train_classes, train_set_y.argmax(axis=-1), train_bets)
-    show_accuracy_for_classes(y_train_classes, train_set_y.argmax(axis=-1))
+    show_winnings(y_train_classes, y_train.argmax(axis=-1), odds[0])
+    show_accuracy_for_classes(y_train_classes, y_train.argmax(axis=-1))
 
     print("Walidacyjny zbior: ")
     y_prob = model.predict(val_set[0])
     y_classes = y_prob.argmax(axis=-1)
-    val_set_y = val_set[1][:, 0:4]
-    bets = val_set[1][:, 4:7]
-    show_winnings(y_classes, val_set_y.argmax(axis=-1), bets)
-    show_accuracy_for_classes(y_classes, val_set_y.argmax(axis=-1))
+    show_winnings(y_classes, val_set[1].argmax(axis=-1), odds[1])
+    show_accuracy_for_classes(y_classes, val_set[1].argmax(axis=-1))
 
     plot_metric(history, 'loss')
+    plot_metric(history, 'accuracy')
     save_model(model)
     return model
