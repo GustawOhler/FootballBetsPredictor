@@ -10,6 +10,7 @@ from tensorflow.python.keras.regularizers import l2
 import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
 import numpy as np
+import math
 
 
 class Categories(Enum):
@@ -35,7 +36,14 @@ def plot_metric(history, metric):
     plt.ylabel(metric)
     plt.legend(["train_" + metric, 'val_' + metric])
     if metric == 'loss':
-        plt.ylim([0, 0.8])
+        # concated_metrics = np.concatenate((np.asarray(train_metrics), np.asarray(val_metrics)))
+        # concated_metrics = concated_metrics[concated_metrics < 30]
+        # avg = np.average(concated_metrics)
+        # std_dev = math.sqrt(np.sum(concated_metrics * concated_metrics) / len(concated_metrics) - avg ** 2)
+        # start = avg - 1.25 * std_dev
+        # end = avg + 1.25 * std_dev
+        # plt.ylim([start, end])
+        plt.ylim([0, 2.5])
     plt.show()
 
 
@@ -50,7 +58,7 @@ def show_winnings(predicted_classes, actual_classes, odds):
             winnings = winnings + odds[i][actual_classes[i]] - 1.0
         else:
             winnings = winnings - 1.0
-    print("Bilans wygranych/strat z potencjalnych zakładów w zbiorze walidacyjnym: " + str(winnings))
+    print("Bilans wygranych/strat z potencjalnych zakładów: " + str(winnings))
 
 
 def show_accuracy_for_classes(predicted_classes, actual_classes):
@@ -102,8 +110,9 @@ def only_best_prob_odds_profit(y_true, y_pred):
     odds_b = y_true[:, 6:7]
     gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
                                   draw * (odds_draw - 1) + (1 - draw) * -1,
-                                  win_away * (odds_b - 1) + (1 - win_away) * -1,
-                                  tf.zeros_like(odds_a)], axis=1)
+                                  win_away * (odds_b - 1) + (1 - win_away) * -1
+                                  # tf.zeros_like(odds_a)
+                                  ], axis=1)
     zerod_prediction = tf.where(
         tf.not_equal(tf.reduce_max(y_pred, axis=1, keepdims=True), y_pred),
         tf.zeros_like(y_pred),
@@ -120,9 +129,17 @@ def how_many_no_bets(y_true, y_pred):
     return tf.reduce_sum(tf.cast(logical, tf.float32)) * 100.0 / tf.cast(tf.shape(y_pred)[0], tf.float32)
 
 
+def categorical_crossentropy_with_bets(y_true, y_pred):
+    return keras.losses.categorical_crossentropy(y_true[:, 0:3], y_pred)
+
+
+def categorical_acc_with_bets(y_true, y_pred):
+    return keras.metrics.categorical_accuracy(y_true[:, 0:3], y_pred)
+
+
 def create_NN_model(x_train):
-    factor = 0.0001
-    rate = 0.03
+    factor = 0.0015
+    rate = 0.06
 
     # tf.compat.v1.disable_eager_execution()
     model = tf.keras.models.Sequential()
@@ -133,12 +150,12 @@ def create_NN_model(x_train):
                                  kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(1024, activation='relu',
-                                 activity_regularizer=l2(factor/2),
-                                 kernel_regularizer=l2(factor),
-                                 kernel_initializer=tf.keras.initializers.he_normal()))
-    model.add(keras.layers.Dropout(rate))
-    model.add(keras.layers.BatchNormalization())
+    # model.add(keras.layers.Dense(1024, activation='relu',
+    #                              activity_regularizer=l2(factor/2),
+    #                              kernel_regularizer=l2(factor),
+    #                              kernel_initializer=tf.keras.initializers.he_normal()))
+    # model.add(keras.layers.Dropout(rate))
+    # model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(1024, activation='relu',
                                  activity_regularizer=l2(factor/2),
                                  kernel_regularizer=l2(factor),
@@ -146,33 +163,31 @@ def create_NN_model(x_train):
     model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(256, activation='relu',
-                                 activity_regularizer=l2(factor/4),
+                                 # activity_regularizer=l2(factor/4),
                                  kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(64, activation='relu',
-                                 activity_regularizer=l2(factor / 4),
+                                 # activity_regularizer=l2(factor / 10),
                                  kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(32, activation='relu',
-                                 activity_regularizer=l2(factor / 6),
+                                 # activity_regularizer=l2(factor / 10),
                                  kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.Dropout(rate / 4))
     model.add(keras.layers.BatchNormalization())
     model.add(keras.layers.Dense(16, activation='relu',
-                                 activity_regularizer=l2(factor / 10),
+                                 # activity_regularizer=l2(factor / 10),
                                  kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.Dense(3, activation='softmax', kernel_initializer=tf.keras.initializers.he_normal()))
-    opt = keras.optimizers.Adam(learning_rate=0.0015)
-    loss = keras.losses.binary_crossentropy()
-    model.compile(loss='binary_crossentropy',
-                  optimizer=opt,
-                  metrics=['accuracy'])
+    model.compile(loss=categorical_crossentropy_with_bets,
+                  optimizer=keras.optimizers.Adam(learning_rate=0.0015),
+                  metrics=[categorical_acc_with_bets, only_best_prob_odds_profit])
     # only_best_prob_odds_profit
     return model
 
@@ -185,34 +200,37 @@ def load_model():
     return keras.models.load_model(saved_model_location)
 
 
-def perform_nn_learning(model, train_set, val_set, odds):
+def eval_model_after_learning(y_true, y_pred, odds):
+    y_pred_classes = y_pred.argmax(axis=-1)
+    y_true_classes = y_true.argmax(axis=-1)
+    show_winnings(y_pred_classes, y_true_classes, odds)
+    show_accuracy_for_classes(y_pred_classes, y_true_classes)
+
+
+def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
+    x_val = val_set[0]
+    y_val = val_set[1]
 
     # tf.compat.v1.disable_eager_execution()
-    history = model.fit(x_train, y_train, epochs=50, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        # callbacks=[EarlyStopping(patience=25, min_delta=0.0001, monitor='val_accuracy', mode='max', verbose=1),
-                        #            ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_accuracy',
-                        #                            mode='max', verbose=1)]
+    history = model.fit(x_train, y_train, epochs=350, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=60, min_delta=0.0001, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
+                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True,
+                                                   monitor='val_only_best_prob_odds_profit',
+                                                   mode='max', verbose=1)]
                         # TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_images=True, write_graph=True)]
                         )
 
     model.load_weights(saved_weights_location)
 
-    # TODO: wydzielic do funkcji
     print("Treningowy zbior: ")
-    y_train_prob = model.predict(x_train)
-    y_train_classes = y_train_prob.argmax(axis=-1)
-    show_winnings(y_train_classes, y_train.argmax(axis=-1), odds[0])
-    show_accuracy_for_classes(y_train_classes, y_train.argmax(axis=-1))
-
+    eval_model_after_learning(y_train[:, 0:3], model.predict(x_train), y_train[:, 4:7])
     print("Walidacyjny zbior: ")
-    y_prob = model.predict(val_set[0])
-    y_classes = y_prob.argmax(axis=-1)
-    show_winnings(y_classes, val_set[1].argmax(axis=-1), odds[1])
-    show_accuracy_for_classes(y_classes, val_set[1].argmax(axis=-1))
+    eval_model_after_learning(y_val[:, 0:3], model.predict(x_val), y_val[:, 4:7])
 
     plot_metric(history, 'loss')
-    plot_metric(history, 'accuracy')
+    plot_metric(history, 'only_best_prob_odds_profit')
+    plot_metric(history, 'categorical_acc_with_bets')
     save_model(model)
     return model
