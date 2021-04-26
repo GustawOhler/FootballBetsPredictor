@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 
-from models import Match, Team, Table, TableTeam, MatchResult
+from models import Match, Team, Table, TableTeam, MatchResult, Season, League
 
 results_dict = {'H': 0, 'D': 1, 'A': 2}
 
@@ -114,11 +114,11 @@ def fill_last_matches_stats(matches: [Match], team: Team):
                                shots_conceded_on_target=get_shots_conceded_on_target(matches, team) / matches_count)
 
 
-
-
 def create_dataset():
     dataset = []
-    root_matches = Match.select()
+    root_matches = Match.select().join(Season).join(League).where(
+        League.division == 1
+    )
     root_matches_count = root_matches.count()
     sum_of_time_elapsed = 0
     for index, root_match in enumerate(root_matches.iterator()):
@@ -179,18 +179,18 @@ def create_dataset():
         index_from_1 = index + 1
         print("Przetwarzany rekord " + str(index_from_1) + " z " + str(root_matches_count) + " czyli "
               + str("{:.2f}".format(index_from_1 * 100 / root_matches_count)) + "%. Sredni czas przetwarzania dla 100 rekordow: " + str(
-            "{:.2f} s".format(sum_of_time_elapsed * 100/index_from_1)), end=("\r" if index_from_1 != root_matches_count else "\n"))
+            "{:.2f} s".format(sum_of_time_elapsed * 100 / index_from_1)), end=("\r" if index_from_1 != root_matches_count else "\n"))
 
     csv_proccesing_start = timer()
     pd_dataset = pd.DataFrame(flatten(asdict(row), reducer='underscore') for row in dataset)
-    pd_dataset.to_csv('dataset.csv', index=False, float_format='%.3f')
+    pd_dataset.to_csv('only_best_dataset.csv', index=False, float_format='%.3f')
     csv_proccesing_end = timer()
     print("Czas przetwarzania rekordow do csvki: " + str("{:.2f} s".format(csv_proccesing_end - csv_proccesing_start)))
     return pd_dataset
 
 
 def load_dataset():
-    return pd.read_csv("dataset.csv")
+    return pd.read_csv("only_best_dataset.csv")
 
 
 def split_dataset(dataset: pd.DataFrame, validation_split=0.2):
