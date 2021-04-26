@@ -250,7 +250,7 @@ def perform_nn_learning(model, train_set, val_set):
     y_val = val_set[1]
 
     # tf.compat.v1.disable_eager_execution()
-    history = model.fit(x_train, y_train, epochs=350, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2]
+    history = model.fit(x_train, y_train, epochs=350, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
                         callbacks=[EarlyStopping(patience=60, min_delta=0.0001, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True,
                                                    monitor='val_only_best_prob_odds_profit',
