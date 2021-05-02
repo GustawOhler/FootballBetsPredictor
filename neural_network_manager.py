@@ -131,8 +131,8 @@ def how_many_no_bets(y_true, y_pred):
 
 
 def create_NN_model(x_train):
-    factor = 0.0001
-    rate = 0.5
+    factor = 0.000003
+    rate = 0.475
 
     # tf.compat.v1.disable_eager_execution()
     model = tf.keras.models.Sequential()
