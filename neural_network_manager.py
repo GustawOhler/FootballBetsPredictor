@@ -19,6 +19,18 @@ class Categories(Enum):
     NO_BET = 3
 
 
+class WeightChangeMonitor(keras.callbacks.Callback):
+    def on_epoch_begin(self, epoch, logs=None):
+        self.start_weights = list(self.model.layers[1].get_weights())
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.start_weights is not None and len(self.start_weights) > 0:
+            end_weights = self.model.layers[1].get_weights()
+            bias_change = np.mean(np.abs(end_weights[1] - self.start_weights[1]))
+            weight_change = np.mean(np.abs(end_weights[0] - self.start_weights[0]))
+            print("Bias change of first layer: " + str(bias_change) + " weight change of first layer: " + str(weight_change))
+
+
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
 saved_model_location = "./NN_full_model/"
 saved_weights_location = "./NN_model_weights/checkpoint_weights"
@@ -119,56 +131,60 @@ def how_many_no_bets(y_true, y_pred):
 
 
 def create_NN_model(x_train):
-    factor = 0.00065
-    rate = 0.05
+    factor = 0.0001
+    rate = 0.5
 
     # tf.compat.v1.disable_eager_execution()
     model = tf.keras.models.Sequential()
     model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(4096, activation='relu',
-                                 activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
-    model.add(keras.layers.BatchNormalization())
-    model.add(keras.layers.Dense(512, activation='relu',
+    model.add(keras.layers.Dense(2048, activation='relu',
                                  # activity_regularizer=l2(factor),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
-    # model.add(keras.layers.BatchNormalization())
-    # model.add(keras.layers.Dense(512, activation='relu',
-    #                              # activity_regularizer=l2(factor / 2),
-    #                              kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.Dense(512, activation='relu',
                                  # activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor), kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate))
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
     model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.Dense(256, activation='relu',
                                  # activity_regularizer=l2(factor / 2),
                                  kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(128, activation='relu',
+                                 # activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate))
     model.add(keras.layers.Dense(64, activation='relu',
                                  # activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor/10),
+                                 kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 2))
     model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate))
+    model.add(keras.layers.Dense(64, activation='relu',
+                                 # activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor),
+                                 kernel_initializer=tf.keras.initializers.he_normal()))
+    model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate/2))
     model.add(keras.layers.Dense(32, activation='relu',
                                  # activity_regularizer=l2(factor / 2),
-                                 kernel_regularizer=l2(factor/10),
+                                 kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
-    # model.add(keras.layers.Dropout(rate / 4))
     model.add(keras.layers.BatchNormalization())
+    model.add(keras.layers.Dropout(rate/2))
     model.add(keras.layers.Dense(16, activation='relu',
-                                 # activity_regularizer=l2(factor / 4),
-                                 kernel_regularizer=l2(factor/10),
+                                 # activity_regularizer=l2(factor / 2),
+                                 kernel_regularizer=l2(factor),
                                  kernel_initializer=tf.keras.initializers.he_normal()))
-    model.add(keras.layers.Dense(4, activation='softmax', kernel_initializer=tf.keras.initializers.he_normal()))
-    opt = keras.optimizers.Adam(learning_rate=0.001)
+    model.add(keras.layers.Dense(4, activation='softmax', kernel_regularizer=l2(factor/10)))
+    opt = keras.optimizers.Adam(learning_rate=0.0001)
     model.compile(loss=odds_loss,
                   optimizer=opt,
                   metrics=[how_many_no_bets, only_best_prob_odds_profit])
@@ -188,11 +204,12 @@ def perform_nn_learning(model, train_set, val_set):
     y_train = train_set[1]
 
     # tf.compat.v1.disable_eager_execution()
-    history = model.fit(x_train, y_train, epochs=400, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
-                        callbacks=[EarlyStopping(patience=75, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
+    history = model.fit(x_train, y_train, epochs=150, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=30, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_only_best_prob_odds_profit',
                                                    mode='max', verbose=1)]
-                                   # TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_images=True, write_graph=True)]
+                        # callbacks=[TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_graph=True)]
+                        # callbacks=[WeightChangeMonitor()]
                         )
 
     model.load_weights(saved_weights_location)
