@@ -3,6 +3,9 @@ MatchesData/
 dataset.csv
 NN_full_model/
 NN_model_weights/
+best_yet_NN_full_model/
+*.csv
+*.png
 
 # Created by .ignore support plugin (hsz.mobi)
 ### Python template
