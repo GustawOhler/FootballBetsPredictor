@@ -28,7 +28,8 @@ def download_info_about_matches(web_handler, link, download_to_path):
     for i, header in enumerate(season_headers):
         if i < SEASON_TO_DOWNLOAD_COUNT:
             season_years = header.text.split()[1].replace("/", "")
-            league_in_curr_season_download_elements = header.find_elements_by_xpath("./following-sibling::a[position()<=2]")
+            league_in_curr_season_download_elements = header.find_elements_by_xpath("./following-sibling::a[position()<=2 and preceding-sibling::i[text("
+                                                                                    ")='" + header.text + "' and position() = 1]]")
             for league_download_element in league_in_curr_season_download_elements:
                 download_link = league_download_element.get_attribute("href")
                 extension = download_link.split(".")[-1]
