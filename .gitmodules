@@ -1,3 +1,6 @@
 [submodule "dataset_manager"]
 	path = dataset_manager
 	url = https://github.com/GustawOhler/FootballBetsPredictor-dataset_manager.git
+[submodule "nn_manager"]
+	path = nn_manager
+	url = https://github.com/GustawOhler/FootballBetsPredictor-nn_manager.git
