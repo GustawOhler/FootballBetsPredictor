@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime
+from enum import Enum
 import pandas as pd
 from flatten_dict import flatten
 from tensorflow.python.keras.utils.np_utils import to_categorical
@@ -7,9 +8,14 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 
-from models import Match, Team, Table, TableTeam, MatchResult
+from models import Match, Team, Table, TableTeam, MatchResult, Season, League
 
 results_dict = {'H': 0, 'D': 1, 'A': 2}
+
+
+class DatasetType(Enum):
+    TRAIN = 'Train'
+    VAL = 'Val'
 
 
 @dataclass
@@ -193,12 +199,41 @@ def load_dataset():
     return pd.read_csv("dataset.csv")
 
 
+def save_splitted_dataset(x, y, type: DatasetType, column_names):
+    concat = np.column_stack((x, y))
+    df = pd.DataFrame(data=concat, columns=column_names)
+    df.to_csv(type.value + '_set.csv', index=False, float_format='%.3f')
+    return df
+
+
+def load_splitted_dataset(type: DatasetType):
+    dataset = pd.read_csv(type.value + '_set.csv')
+    x = dataset.drop('result', axis='columns').to_numpy(dtype='float32')
+    y = get_y_ready_for_learning(dataset)
+    return x, y
+
+
 def split_dataset(dataset: pd.DataFrame, validation_split=0.2):
-    x = dataset.drop('result', axis='columns').to_numpy()
+    x = dataset.drop('result', axis='columns').to_numpy(dtype='float32')
+    y = dataset['result'].to_numpy()
+    x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=validation_split)
+    column_names = dataset.columns.values.tolist()
+    column_names.remove('result')
+    column_names.append('result')
+    train_df = save_splitted_dataset(x_train, y_train, DatasetType.TRAIN, column_names)
+    val_df = save_splitted_dataset(x_val, y_val, DatasetType.VAL, column_names)
+    return (x_train, get_y_ready_for_learning(train_df)), (x_val, get_y_ready_for_learning(val_df))
+
+
+def get_y_ready_for_learning(dataset: pd.DataFrame):
     y = dataset['result'].to_numpy()
     one_hot_y = to_categorical(y, num_classes=3)
     odds = dataset[['home_odds', 'draw_odds', 'away_odds']].to_numpy()
     zero_vector = np.zeros((one_hot_y.shape[0], 1))
-    y_final = np.concatenate((one_hot_y, zero_vector, odds), axis=1)
-    x_train, x_val, y_train, y_val = train_test_split(x, y_final, test_size=validation_split)
-    return (x_train, y_train), (x_val, y_val)
+    return np.float32(np.concatenate((one_hot_y, zero_vector, odds), axis=1))
+
+
+# def get_y_ready_for_learning(y: np.ndarray, odds: np.ndarray):
+#     one_hot_y = to_categorical(y, num_classes=3)
+#     zero_vector = np.zeros((one_hot_y.shape[0], 1))
+#     return np.float32(np.concatenate((one_hot_y, zero_vector, odds), axis=1))
