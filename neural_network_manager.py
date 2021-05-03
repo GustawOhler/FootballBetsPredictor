@@ -1,8 +1,12 @@
+import math
 from enum import Enum
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.python.keras.callbacks_v1 import TensorBoard
 from tensorflow.python.keras.regularizers import l2
 import matplotlib.pyplot as plt
 from dataset_creator import split_dataset
@@ -16,9 +20,22 @@ class Categories(Enum):
     NO_BET = 3
 
 
+class WeightChangeMonitor(keras.callbacks.Callback):
+    def on_epoch_begin(self, epoch, logs=None):
+        self.start_weights = list(self.model.layers[1].get_weights())
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.start_weights is not None and len(self.start_weights) > 0:
+            end_weights = self.model.layers[1].get_weights()
+            bias_change = np.mean(np.abs(end_weights[1] - self.start_weights[1]))
+            weight_change = np.mean(np.abs(end_weights[0] - self.start_weights[0]))
+            print("Bias change of first layer: " + str(bias_change) + " weight change of first layer: " + str(weight_change))
+
+
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
 saved_model_location = "./NN_full_model/"
 saved_weights_location = "./NN_model_weights/checkpoint_weights"
+confidence_threshold = 0.015
 
 
 def plot_metric(history, metric):
@@ -31,6 +48,15 @@ def plot_metric(history, metric):
     plt.xlabel("Epochs")
     plt.ylabel(metric)
     plt.legend(["train_" + metric, 'val_' + metric])
+    if metric == 'loss':
+        concated_metrics = np.concatenate((np.asarray(train_metrics), np.asarray(val_metrics)))
+        concated_metrics = concated_metrics[concated_metrics < 30]
+        avg = np.average(concated_metrics)
+        std_dev = math.sqrt(np.sum(concated_metrics * concated_metrics) / len(concated_metrics) - avg ** 2)
+        start = avg - 1.25 * std_dev
+        end = avg + 1.25 * std_dev
+        plt.ylim([start, end])
+        # plt.ylim([0.5, 2])
     plt.show()
 
 
@@ -38,13 +64,33 @@ def show_winnings(predicted_classes, actual_classes, odds):
     winnings = 0.0
     for i in range(predicted_classes.shape[0]):
         # Jesli siec zdecydowala sie nie obstawiac meczu
+        # todo: czytelniej
         if predicted_classes[i] == Categories.NO_BET.value:
             continue
         elif predicted_classes[i] == actual_classes[i]:
             winnings = winnings + odds[i][actual_classes[i]] - 1.0
         else:
             winnings = winnings - 1.0
-    print("Bilans wygranych/strat z potencjalnych zakładów w zbiorze walidacyjnym: " + str(winnings))
+    print("Bilans wygranych/strat z potencjalnych zakładów: " + str(winnings))
+
+
+def show_winnings_within_threshold(classes_possibilities, actual_classes, odds):
+    winnings = 0.0
+    no_bet = 0
+    outcome_possibilities = 1.0 / odds
+    prediction_diff = classes_possibilities - outcome_possibilities
+    chosen_class = classes_possibilities.argmax(axis=-1)
+    for i in range(prediction_diff.shape[0]):
+        # Jesli siec zdecydowala sie nie obstawiac meczu
+        if prediction_diff[i][chosen_class[i]] < confidence_threshold:
+            no_bet += 1
+            continue
+        elif chosen_class[i] == actual_classes[i]:
+            winnings = winnings + odds[i][actual_classes[i]] - 1.0
+        else:
+            winnings = winnings - 1.0
+    print("Bilans wygranych/strat z potencjalnych zakładów: " + str(winnings))
+    print("Ilosc nieobstawionych zakładów z powodu zbyt niskiej pewnosci: " + str(no_bet))
 
 
 def show_accuracy_for_classes(predicted_classes, actual_classes):
@@ -71,6 +117,16 @@ def show_accuracy_for_classes(predicted_classes, actual_classes):
           + "% (" + str(not_bet_sum) + "/" + str(all_classes_len) + ")")
 
 
+def show_accuracy_within_threshold(classes_possibilities, actual_classes, odds):
+    outcome_possibilities = 1.0 / odds
+    prediction_diff = classes_possibilities - outcome_possibilities
+    chosen_class = classes_possibilities.argmax(axis=-1)
+    for index, c in enumerate(chosen_class):
+        if prediction_diff[index, c] < confidence_threshold:
+            chosen_class[index] = Categories.NO_BET.value
+    show_accuracy_for_classes(chosen_class, actual_classes)
+
+
 def odds_loss(y_true, y_pred):
     win_home_team = y_true[:, 0:1]
     draw = y_true[:, 1:2]
@@ -79,11 +135,31 @@ def odds_loss(y_true, y_pred):
     odds_a = y_true[:, 4:5]
     odds_draw = y_true[:, 5:6]
     odds_b = y_true[:, 6:7]
-    gain_loss_vector = tf.keras.backend.concatenate([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
-                                                     draw * (odds_draw - 1) + (1 - draw) * -1,
-                                                     win_away * (odds_b - 1) + (1 - win_away) * -1,
-                                                     tf.keras.backend.ones_like(odds_a) * -0.03], axis=1)
-    return -1 * tf.keras.backend.mean(tf.keras.backend.sum(gain_loss_vector * y_pred, axis=1))
+    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
+                                  draw * (odds_draw - 1) + (1 - draw) * -1,
+                                  win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                  tf.zeros_like(odds_a)], axis=1)
+    return -1 * tf.reduce_mean(tf.reduce_sum(gain_loss_vector * y_pred, axis=1))
+
+
+def only_best_prob_odds_profit(y_true, y_pred):
+    win_home_team = y_true[:, 0:1]
+    draw = y_true[:, 1:2]
+    win_away = y_true[:, 2:3]
+    no_bet = y_true[:, 3:4]
+    odds_a = y_true[:, 4:5]
+    odds_draw = y_true[:, 5:6]
+    odds_b = y_true[:, 6:7]
+    gain_loss_vector = tf.concat([win_home_team * (odds_a - 1) + (1 - win_home_team) * -1,
+                                  draw * (odds_draw - 1) + (1 - draw) * -1,
+                                  win_away * (odds_b - 1) + (1 - win_away) * -1,
+                                  tf.zeros_like(odds_a)], axis=1)
+    zerod_prediction = tf.where(
+        tf.not_equal(tf.reduce_max(y_pred, axis=1, keepdims=True), y_pred),
+        tf.zeros_like(y_pred),
+        tf.ones_like(y_pred)
+    )
+    return tf.reduce_mean(tf.reduce_sum(gain_loss_vector * zerod_prediction, axis=1))
 
 
 def how_many_no_bets(y_true, y_pred):
@@ -94,8 +170,8 @@ def how_many_no_bets(y_true, y_pred):
     return tf.reduce_sum(tf.cast(logical, tf.float32)) * 100.0 / tf.cast(tf.shape(y_pred)[0], tf.float32)
 
 
-def create_keras_model(x_train):
-    factor = 0.001
+def create_NN_model(x_train):
+    factor = 0.003
     rate = 0.1
 
     model_input = keras.Input(shape=(x_train.shape[1],))
@@ -147,25 +223,44 @@ def load_model():
     return keras.models.load_model(saved_model_location)
 
 
+def eval_model_after_learning(y_true, y_pred, odds):
+    y_pred_classes = y_pred.argmax(axis=-1)
+    y_true_classes = y_true.argmax(axis=-1)
+    show_winnings(y_pred_classes, y_true_classes, odds)
+    show_accuracy_for_classes(y_pred_classes, y_true_classes)
+
+
+def eval_model_after_learning_within_threshold(y_true, y_pred, odds):
+    y_pred_classes = y_pred.argmax(axis=-1)
+    y_true_classes = y_true.argmax(axis=-1)
+    show_winnings_within_threshold(y_pred, y_true_classes, odds)
+    show_accuracy_within_threshold(y_pred, y_true_classes, odds)
+
+
 def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
-    y_train = train_set[1][:, 0:3]
+    y_train = train_set[1]
     x_val = val_set[0]
-    y_val = val_set[1][:, 0:3]
+    y_val = val_set[1]
 
-    history = model.fit(x_train, y_train, epochs=50, batch_size=256, verbose=1, shuffle=False, validation_data=(x_val, y_val),
-                        callbacks=[EarlyStopping(patience=5, verbose=1),
-                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, verbose=1)])
+    # tf.compat.v1.disable_eager_execution()
+    history = model.fit(x_train, y_train, epochs=10, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+                        callbacks=[EarlyStopping(patience=50, min_delta=0.0001, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
+                                   ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_only_best_prob_odds_profit',
+                                                   mode='max', verbose=1)]
+                        # callbacks=[TensorBoard(write_grads=True, histogram_freq=1, log_dir='.\\tf_logs', write_graph=True)]
+                        # callbacks=[WeightChangeMonitor()]
+                        )
 
     model.load_weights(saved_weights_location)
 
-    y_prob = model.predict(val_set[0])
-    y_classes = y_prob.argmax(axis=-1)
-    val_set_y = val_set[1][:, 0:3]
-    bets = val_set[1][:, 4:7]
-    show_winnings(y_classes, val_set_y.argmax(axis=-1), bets)
-    show_accuracy_for_classes(y_classes, val_set_y.argmax(axis=-1))
+    print("Treningowy zbior: ")
+    eval_model_after_learning(y_train[:, 0:4], model.predict(x_train), y_train[:, 4:7])
+
+    print("Walidacyjny zbior: ")
+    eval_model_after_learning(y_val[:, 0:4], model.predict(x_val), y_val[:, 4:7])
 
     plot_metric(history, 'loss')
+    plot_metric(history, 'only_best_prob_odds_profit')
     save_model(model)
     return model

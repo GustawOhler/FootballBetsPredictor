@@ -2,8 +2,8 @@ from os import listdir
 from os.path import isfile, join
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
-from dataset_creator import create_dataset, load_dataset, split_dataset
-from neural_network_manager import perform_nn_learning, load_model, create_keras_model
+from dataset_creator import create_dataset, load_dataset, split_dataset, load_splitted_dataset, DatasetType
+from neural_network_manager import perform_nn_learning, load_model, create_NN_model
 import web_data_scraper
 from timeit import default_timer as timer
 
@@ -13,8 +13,10 @@ NEED_TO_CREATE_DATASET = False
 SHOULD_DOWNLOAD_DATA = False
 SHOULD_LOAD_MODEL_FROM_FILE = False
 NEED_TO_PROCESS_CSV = False
+SHOULD_RUN_NN = True
+LOAD_PREVIOUS_SPLIT = True
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
-TRAIN_VALIDATION_SPLIT = 0.15
+TRAIN_VALIDATION_SPLIT = 0.2
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
@@ -33,10 +35,15 @@ if NEED_TO_CREATE_DATASET:
 else:
     dataset = load_dataset()
 
-(x_train, y_train), (x_val, y_val) = split_dataset(dataset, TRAIN_VALIDATION_SPLIT)
-if SHOULD_LOAD_MODEL_FROM_FILE:
-    model = load_model()
-else:
-    model = create_keras_model(x_train)
+if SHOULD_RUN_NN:
+    if LOAD_PREVIOUS_SPLIT:
+        x_train, y_train = load_splitted_dataset(DatasetType.TRAIN)
+        x_val, y_val = load_splitted_dataset(DatasetType.VAL)
+    else:
+        (x_train, y_train), (x_val, y_val) = split_dataset(dataset, TRAIN_VALIDATION_SPLIT)
+    if SHOULD_LOAD_MODEL_FROM_FILE:
+        model = load_model()
+    else:
+        model = create_NN_model(x_train)
 
-perform_nn_learning(model, (x_train, y_train), (x_val, y_val))
+    perform_nn_learning(model, (x_train, y_train), (x_val, y_val))
