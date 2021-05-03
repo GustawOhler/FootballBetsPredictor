@@ -1,3 +1,4 @@
+import math
 from enum import Enum
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -34,6 +35,7 @@ class WeightChangeMonitor(keras.callbacks.Callback):
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
 saved_model_location = "./NN_full_model/"
 saved_weights_location = "./NN_model_weights/checkpoint_weights"
+confidence_threshold = 0.015
 
 
 def plot_metric(history, metric):
@@ -46,6 +48,15 @@ def plot_metric(history, metric):
     plt.xlabel("Epochs")
     plt.ylabel(metric)
     plt.legend(["train_" + metric, 'val_' + metric])
+    if metric == 'loss':
+        concated_metrics = np.concatenate((np.asarray(train_metrics), np.asarray(val_metrics)))
+        concated_metrics = concated_metrics[concated_metrics < 30]
+        avg = np.average(concated_metrics)
+        std_dev = math.sqrt(np.sum(concated_metrics * concated_metrics) / len(concated_metrics) - avg ** 2)
+        start = avg - 1.25 * std_dev
+        end = avg + 1.25 * std_dev
+        plt.ylim([start, end])
+        # plt.ylim([0.5, 2])
     plt.show()
 
 
@@ -60,7 +71,26 @@ def show_winnings(predicted_classes, actual_classes, odds):
             winnings = winnings + odds[i][actual_classes[i]] - 1.0
         else:
             winnings = winnings - 1.0
-    print("Bilans wygranych/strat z potencjalnych zakładów w zbiorze walidacyjnym: " + str(winnings))
+    print("Bilans wygranych/strat z potencjalnych zakładów: " + str(winnings))
+
+
+def show_winnings_within_threshold(classes_possibilities, actual_classes, odds):
+    winnings = 0.0
+    no_bet = 0
+    outcome_possibilities = 1.0 / odds
+    prediction_diff = classes_possibilities - outcome_possibilities
+    chosen_class = classes_possibilities.argmax(axis=-1)
+    for i in range(prediction_diff.shape[0]):
+        # Jesli siec zdecydowala sie nie obstawiac meczu
+        if prediction_diff[i][chosen_class[i]] < confidence_threshold:
+            no_bet += 1
+            continue
+        elif chosen_class[i] == actual_classes[i]:
+            winnings = winnings + odds[i][actual_classes[i]] - 1.0
+        else:
+            winnings = winnings - 1.0
+    print("Bilans wygranych/strat z potencjalnych zakładów: " + str(winnings))
+    print("Ilosc nieobstawionych zakładów z powodu zbyt niskiej pewnosci: " + str(no_bet))
 
 
 def show_accuracy_for_classes(predicted_classes, actual_classes):
@@ -85,6 +115,16 @@ def show_accuracy_for_classes(predicted_classes, actual_classes):
     all_classes_len = len(predicted_classes_as_int)
     print("Ilosc nieobstawionych zakladow = {:.1f}".format(100 * not_bet_sum / all_classes_len if all_actual_class_examples != 0 else 0)
           + "% (" + str(not_bet_sum) + "/" + str(all_classes_len) + ")")
+
+
+def show_accuracy_within_threshold(classes_possibilities, actual_classes, odds):
+    outcome_possibilities = 1.0 / odds
+    prediction_diff = classes_possibilities - outcome_possibilities
+    chosen_class = classes_possibilities.argmax(axis=-1)
+    for index, c in enumerate(chosen_class):
+        if prediction_diff[index, c] < confidence_threshold:
+            chosen_class[index] = Categories.NO_BET.value
+    show_accuracy_for_classes(chosen_class, actual_classes)
 
 
 def odds_loss(y_true, y_pred):
@@ -199,12 +239,28 @@ def load_model():
     return keras.models.load_model(saved_model_location)
 
 
+def eval_model_after_learning(y_true, y_pred, odds):
+    y_pred_classes = y_pred.argmax(axis=-1)
+    y_true_classes = y_true.argmax(axis=-1)
+    show_winnings(y_pred_classes, y_true_classes, odds)
+    show_accuracy_for_classes(y_pred_classes, y_true_classes)
+
+
+def eval_model_after_learning_within_threshold(y_true, y_pred, odds):
+    y_pred_classes = y_pred.argmax(axis=-1)
+    y_true_classes = y_true.argmax(axis=-1)
+    show_winnings_within_threshold(y_pred, y_true_classes, odds)
+    show_accuracy_within_threshold(y_pred, y_true_classes, odds)
+
+
 def perform_nn_learning(model, train_set, val_set):
     x_train = train_set[0]
     y_train = train_set[1]
+    x_val = val_set[0]
+    y_val = val_set[1]
 
     # tf.compat.v1.disable_eager_execution()
-    history = model.fit(x_train, y_train, epochs=150, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
+    history = model.fit(x_train, y_train, epochs=5, batch_size=128, verbose=1, shuffle=False, validation_data=val_set[0:2],
                         callbacks=[EarlyStopping(patience=30, monitor='val_only_best_prob_odds_profit', mode='max', verbose=1),
                                    ModelCheckpoint(saved_weights_location, save_best_only=True, save_weights_only=True, monitor='val_only_best_prob_odds_profit',
                                                    mode='max', verbose=1)]
@@ -214,22 +270,11 @@ def perform_nn_learning(model, train_set, val_set):
 
     model.load_weights(saved_weights_location)
 
-    # TODO: wydzielic do funkcji
     print("Treningowy zbior: ")
-    y_train_prob = model.predict(x_train)
-    y_train_classes = y_train_prob.argmax(axis=-1)
-    train_set_y = y_train[:, 0:4]
-    train_bets = y_train[:, 4:7]
-    show_winnings(y_train_classes, train_set_y.argmax(axis=-1), train_bets)
-    show_accuracy_for_classes(y_train_classes, train_set_y.argmax(axis=-1))
+    eval_model_after_learning(y_train[:, 0:4], model.predict(x_train), y_train[:, 4:7])
 
     print("Walidacyjny zbior: ")
-    y_prob = model.predict(val_set[0])
-    y_classes = y_prob.argmax(axis=-1)
-    val_set_y = val_set[1][:, 0:4]
-    bets = val_set[1][:, 4:7]
-    show_winnings(y_classes, val_set_y.argmax(axis=-1), bets)
-    show_accuracy_for_classes(y_classes, val_set_y.argmax(axis=-1))
+    eval_model_after_learning(y_val[:, 0:4], model.predict(x_val), y_val[:, 4:7])
 
     plot_metric(history, 'loss')
     plot_metric(history, 'only_best_prob_odds_profit')
