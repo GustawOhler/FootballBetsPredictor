@@ -2,8 +2,8 @@ from os import listdir
 from os.path import isfile, join
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
-from dataset_creator import create_dataset, load_dataset, split_dataset
-from neural_network_manager import perform_nn_learning, load_model, create_keras_model
+from dataset_manager.dataset_creator import create_dataset, load_dataset, split_dataset
+from nn_manager.neural_network_manager import perform_nn_learning, load_model, create_keras_model
 import web_data_scraper
 from timeit import default_timer as timer
 

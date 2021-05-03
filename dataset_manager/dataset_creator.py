@@ -122,12 +122,12 @@ def create_dataset():
         dataset.append(dataset_row)
 
     pd_dataset = pd.DataFrame([vars(row) for row in dataset])
-    pd_dataset.to_csv('dataset.csv', index=False)
+    pd_dataset.to_csv("./datasets/dataset_ver_1.csv", index=False)
     return pd_dataset
 
 
 def load_dataset():
-    return pd.read_csv("dataset.csv")
+    return pd.read_csv("./datasets/dataset_ver_1.csv")
 
 
 def split_dataset(dataset: pd.DataFrame, validation_split=0.2):

@@ -1,11 +1,9 @@
 from enum import Enum
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.python.keras.regularizers import l2
 import matplotlib.pyplot as plt
-from dataset_creator import split_dataset
 import numpy as np
 
 
