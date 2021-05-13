@@ -1,22 +1,13 @@
 from os import listdir
 from os.path import isfile, join
+from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, SHOULD_LOAD_MODEL_FROM_FILE, NEED_TO_PROCESS_CSV, \
+    SHOULD_RUN_NN, SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.dataset_manager import get_splitted_dataset
 from nn_manager.neural_network_manager import perform_nn_learning, load_model, create_NN_model
 import web_data_scraper
 from timeit import default_timer as timer
-
-NEED_TO_DROP_TABLES = False
-SHOULD_LOG = False
-NEED_TO_CREATE_DATASET = False
-SHOULD_DOWNLOAD_DATA = False
-SHOULD_LOAD_MODEL_FROM_FILE = False
-NEED_TO_PROCESS_CSV = False
-SHOULD_RUN_NN = True
-SHOULD_CREATE_NEW_SPLIT = False
-CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
-VALIDATION_TO_TRAIN_SPLIT_RATIO = 0.125
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
