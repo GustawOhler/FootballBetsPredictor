@@ -163,6 +163,58 @@ def table_creation(season, date, league):
         sorted_team.position = index + 1
         bulk_dictionary.append(sorted_team.__data__)
     TableTeam.insert_many(bulk_dictionary).execute()
+    
+    
+def save_match(season: Season, league: League, matches_data: pd.DataFrame):
+    matches_to_save = []
+    for index, single_match_row in matches_data.iterrows():
+        try:
+            match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                           "%d/%m/%Y %H:%M")
+        except:
+            match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                           "%d/%m/%y %H:%M")
+        matches_to_save.append({
+            'date': match_date,
+            'home_team': Team.get(Team.name == single_match_row["HomeTeam"]),
+            'away_team': Team.get(Team.name == single_match_row["AwayTeam"]),
+            'season': season,
+            'full_time_home_goals': single_match_row["FTHG"],
+            'full_time_away_goals': single_match_row["FTAG"],
+            'full_time_result': MatchResult(single_match_row["FTR"]),
+            'half_time_home_goals': single_match_row["HTHG"],
+            'half_time_away_goals': single_match_row["HTAG"],
+            'half_time_result': MatchResult(single_match_row["HTR"]),
+            'home_team_shots': single_match_row["HS"],
+            'home_team_shots_on_target': single_match_row["HST"],
+            'home_team_woodwork_hits': single_match_row["HHW"] if 'HHW' in matches_data.columns else None,
+            'home_team_corners': single_match_row["HC"],
+            'home_team_fouls_committed': single_match_row["HF"],
+            'home_team_free_kicks_conceded': single_match_row["HFKC"] if 'HFKC' in matches_data.columns else None,
+            'home_team_offsides': single_match_row["HO"] if 'HO' in matches_data.columns else None,
+            'home_team_yellow_cards': single_match_row["HY"],
+            'home_team_red_cards': single_match_row["HR"],
+            'away_team_shots': single_match_row["AS"],
+            'away_team_shots_on_target': single_match_row["AST"],
+            'away_team_woodwork_hits': single_match_row["AHW"] if 'AHW' in matches_data.columns else None,
+            'away_team_corners': single_match_row["AC"],
+            'away_team_fouls_committed': single_match_row["AF"],
+            'away_team_free_kicks_conceded': single_match_row["AFKC"] if 'AFKC' in matches_data.columns else None,
+            'away_team_offsides': single_match_row["AO"] if 'AO' in matches_data.columns else None,
+            'away_team_yellow_cards': single_match_row["AY"],
+            'away_team_red_cards': single_match_row["AR"],
+            'average_home_odds': (
+                single_match_row["AvgH"] if 'AvgH' in matches_data.columns else single_match_row["BbAvH"]),
+            'average_draw_odds': (
+                single_match_row["AvgD"] if 'AvgD' in matches_data.columns else single_match_row["BbAvD"]),
+            'average_away_odds': (
+                single_match_row["AvgA"] if 'AvgA' in matches_data.columns else single_match_row["BbAvA"])})
+    Match.insert_many(matches_to_save).execute()
+    for matchDate in matches_data["Date"].unique():
+        try:
+            table_creation(season, datetime.strptime(matchDate, "%d/%m/%Y"), league)
+        except ValueError:
+            table_creation(season, datetime.strptime(matchDate, "%d/%m/%y"), league)
 
 
 def save_league_data_to_db(matches_data):
@@ -191,57 +243,44 @@ def save_league_data_to_db(matches_data):
             team_tuple = Team.get_or_create(name=team_name)
             TeamSeason.create(team=team_tuple[0], season=db_season)
 
-        matches_to_save = []
-        for index, single_match_row in matches_data.iterrows():
-            try:
-                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
-                                               "%d/%m/%Y %H:%M")
-            except:
-                match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
-                                               "%d/%m/%y %H:%M")
-            matches_to_save.append({
-                'date': match_date,
-                'home_team': Team.get(Team.name == single_match_row["HomeTeam"]),
-                'away_team': Team.get(Team.name == single_match_row["AwayTeam"]),
-                'season': db_season,
-                'full_time_home_goals': single_match_row["FTHG"],
-                'full_time_away_goals': single_match_row["FTAG"],
-                'full_time_result': MatchResult(single_match_row["FTR"]),
-                'half_time_home_goals': single_match_row["HTHG"],
-                'half_time_away_goals': single_match_row["HTAG"],
-                'half_time_result': MatchResult(single_match_row["HTR"]),
-                'home_team_shots': single_match_row["HS"],
-                'home_team_shots_on_target': single_match_row["HST"],
-                'home_team_woodwork_hits': single_match_row["HHW"] if 'HHW' in matches_data.columns else None,
-                'home_team_corners': single_match_row["HC"],
-                'home_team_fouls_committed': single_match_row["HF"],
-                'home_team_free_kicks_conceded': single_match_row["HFKC"] if 'HFKC' in matches_data.columns else None,
-                'home_team_offsides': single_match_row["HO"] if 'HO' in matches_data.columns else None,
-                'home_team_yellow_cards': single_match_row["HY"],
-                'home_team_red_cards': single_match_row["HR"],
-                'away_team_shots': single_match_row["AS"],
-                'away_team_shots_on_target': single_match_row["AST"],
-                'away_team_woodwork_hits': single_match_row["AHW"] if 'AHW' in matches_data.columns else None,
-                'away_team_corners': single_match_row["AC"],
-                'away_team_fouls_committed': single_match_row["AF"],
-                'away_team_free_kicks_conceded': single_match_row["AFKC"] if 'AFKC' in matches_data.columns else None,
-                'away_team_offsides': single_match_row["AO"] if 'AO' in matches_data.columns else None,
-                'away_team_yellow_cards': single_match_row["AY"],
-                'away_team_red_cards': single_match_row["AR"],
-                'average_home_odds': (
-                    single_match_row["AvgH"] if 'AvgH' in matches_data.columns else single_match_row["BbAvH"]),
-                'average_draw_odds': (
-                    single_match_row["AvgD"] if 'AvgD' in matches_data.columns else single_match_row["BbAvD"]),
-                'average_away_odds': (
-                    single_match_row["AvgA"] if 'AvgA' in matches_data.columns else single_match_row["BbAvA"])})
-        Match.insert_many(matches_to_save).execute()
-        for matchDate in matches_data["Date"].unique():
-            try:
-                table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%Y"), db_league)
-            except ValueError:
-                table_creation(db_season, datetime.strptime(matchDate, "%d/%m/%y"), db_league)
+        save_match(db_season, db_league, matches_data)
         # Table for the end of the season
         table_creation(db_season, league_end_date + timedelta(days=1), db_league)
+    else:
+        if db_season.end_date < league_end_date:
+            for team_name in matches_data["HomeTeam"].unique():
+                team_tuple = Team.get_or_create(name=team_name)
+                TeamSeason.get_or_create(team=team_tuple[0], season=db_season)
+
+            # Deleting last table in unfinished season (as it is not the final one)
+            table_to_delete = Table.select().where(Table.season == db_season).order_by(Table.date.desc()).limit(1).get()
+            TableTeam.delete().where(TableTeam.table == table_to_delete)
+            table_to_delete.delete_instance()
+
+            db_season.end_date = league_end_date
+            db_season.save()
+            match_to_save_indexes = []
+            for index, single_match_row in matches_data.iterrows():
+                try:
+                    match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                                   "%d/%m/%Y %H:%M")
+                except:
+                    match_date = datetime.strptime(single_match_row["Date"] + ' ' + single_match_row["Time"],
+                                                   "%d/%m/%y %H:%M")
+
+                home_team_alias = Team.alias()
+                away_team_alias = Team.alias()
+                query = Match.select(Match, home_team_alias, away_team_alias)\
+                    .join(home_team_alias, on=Match.home_team)\
+                    .switch(Match).join(away_team_alias, on=Match.away_team)\
+                    .where((Match.date == match_date) & (home_team_alias.name == single_match_row["HomeTeam"]) &
+                           (away_team_alias.name == single_match_row["AwayTeam"]))
+                if not query.exists():
+                    match_to_save_indexes.append(index)
+            save_match(db_season, db_league, matches_data.iloc[match_to_save_indexes])
+            # Table for the end of the season
+            table_creation(db_season, league_end_date + timedelta(days=1), db_league)
+            
 
 
 def process_csv_and_save_to_db(csv_file_path):
