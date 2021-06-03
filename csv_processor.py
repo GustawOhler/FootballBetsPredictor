@@ -291,5 +291,5 @@ def process_csv_and_save_to_db(csv_file_path):
             txn.commit()
             print("League data committed to database")
         except BaseException as e:
-            print("Transaction rolling back because of encountered exception:\n" + traceback.format_exc())
+            print("Transaction rolling back because of encountered exception:\n" + traceback.format_exc(limit=4))
             txn.rollback()
