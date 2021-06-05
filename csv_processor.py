@@ -166,6 +166,9 @@ def table_creation(season, date, league):
     
     
 def save_match(season: Season, league: League, matches_data: pd.DataFrame):
+    numeric_columns = matches_data.select_dtypes('number').columns
+    matches_data.loc[:, numeric_columns] = matches_data.loc[:, numeric_columns].fillna(0)
+    matches_data = matches_data.fillna('undef')
     matches_to_save = []
     for index, single_match_row in matches_data.iterrows():
         try:
@@ -184,7 +187,7 @@ def save_match(season: Season, league: League, matches_data: pd.DataFrame):
             'full_time_result': MatchResult(single_match_row["FTR"]),
             'half_time_home_goals': single_match_row["HTHG"],
             'half_time_away_goals': single_match_row["HTAG"],
-            'half_time_result': MatchResult(single_match_row["HTR"]),
+            'half_time_result': MatchResult(single_match_row["HTR"] if single_match_row["HTR"] != "undef" else 'D'),
             'home_team_shots': single_match_row["HS"],
             'home_team_shots_on_target': single_match_row["HST"],
             'home_team_woodwork_hits': single_match_row["HHW"] if 'HHW' in matches_data.columns else None,
