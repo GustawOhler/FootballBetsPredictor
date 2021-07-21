@@ -3,7 +3,8 @@ from os.path import isfile, join
 import numpy as np
 from sklearn.model_selection import KFold
 from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, SHOULD_LOAD_MODEL_FROM_FILE, NEED_TO_PROCESS_CSV, \
-    SHOULD_RUN_NN, SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, PERFORM_K_FOLD, is_model_rnn
+    SHOULD_RUN_NN, SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, PERFORM_K_FOLD, is_model_rnn, \
+    SHOULD_HYPERTUNE
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.dataset_manager import get_splitted_dataset, get_whole_dataset
@@ -17,6 +18,8 @@ from nn_manager.recurrent_nn_choose_bets_manager import RecurrentNNChoosingBetsM
 from nn_manager.gru_nn_choose_bets_manager import GruNNChoosingBetsManager
 from nn_manager.lstm_nn_choose_bets_manager import LstmNNChoosingBetsManager
 from nn_manager.gru_nn_pred_matches_manager import GruNNPredictingMatchesManager
+from nn_manager.lstm_nn_pred_matches_manager import LstmNNPredictingMatchesManager
+from nn_manager.recurrent_nn_pred_matches_manager import RecurrentNNPredictingMatchesManager
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
@@ -56,10 +59,11 @@ if PERFORM_K_FOLD:
 else:
     (x_train, y_train), (x_val, y_val) = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT, VALIDATION_TO_TRAIN_SPLIT_RATIO)
     if SHOULD_RUN_NN:
-        curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), True)
+        curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE)
         if SHOULD_LOAD_MODEL_FROM_FILE:
             curr_nn_manager.model = load_model(curr_nn_manager.get_path_for_saving_model())
-        else:
-            # curr_nn_manager.perform_model_learning()
-            # curr_nn_manager.evaluate_model()
+        elif SHOULD_HYPERTUNE:
             tuned = curr_nn_manager.hyper_tune_model()
+        else:
+            curr_nn_manager.perform_model_learning()
+            curr_nn_manager.evaluate_model()

@@ -14,6 +14,8 @@ class ModelType(Enum):
     GRU = 'GruNNChoosingBetsManager'
     LSTM = 'LstmNNChoosingBetsManager'
     GRU_pred_matches = 'GruNNPredictingMatchesManager'
+    RNN_pred_matches = 'RecurrentNNPredictingMatchesManager'
+    LSTM_pred_matches = 'LstmNNPredictingMatchesManager'
 
 ids_path = 'dataset_manager/datasets/match_ids'
 base_dataset_path = 'dataset_manager/datasets/'
@@ -27,10 +29,11 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 saved_model_based_path = "./NN_full_model/"
 saved_model_weights_base_path = "./NN_model_weights/"
-confidence_threshold = 0.03
+# confidence_threshold = 0.03
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
-curr_nn_manager_name = ModelType.GRU.value
-is_model_rnn = curr_nn_manager_name in [ModelType.RNN.value, ModelType.GRU.value, ModelType.LSTM.value, ModelType.GRU_pred_matches.value]
+curr_nn_manager_name = ModelType.LSTM_pred_matches.value
+is_model_rnn = curr_nn_manager_name in [ModelType.RNN.value, ModelType.GRU.value, ModelType.LSTM.value, ModelType.GRU_pred_matches.value,
+                                        ModelType.RNN_pred_matches.value, ModelType.LSTM_pred_matches.value]
 # endregion
 # region main
 NEED_TO_DROP_TABLES = False
@@ -44,6 +47,7 @@ SHOULD_CREATE_NEW_SPLIT = False
 SPLIT_MATCHES_BY_QUERY = True
 PERFORM_K_FOLD = False
 TAKE_MATCHES_FROM_QUERY = False
+SHOULD_HYPERTUNE = True
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
 VALIDATION_TO_TRAIN_SPLIT_RATIO = 0.1
 # endregion
