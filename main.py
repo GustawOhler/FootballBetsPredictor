@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, SHOULD_LOAD_MODEL_FROM_FILE, NEED_TO_PROCESS_CSV, \
     SHOULD_RUN_NN, SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, PERFORM_K_FOLD, is_model_rnn, \
-    SHOULD_HYPERTUNE
+    SHOULD_HYPERTUNE, TEST_TO_VALIDATION_SPLIT_RATIO
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.dataset_manager import get_splitted_dataset, get_whole_dataset
@@ -57,9 +57,13 @@ if PERFORM_K_FOLD:
     for i, name in enumerate(metrics_names):
         print(name + ": " + str(mean_metrics[i]))
 else:
-    (x_train, y_train), (x_val, y_val) = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT, VALIDATION_TO_TRAIN_SPLIT_RATIO)
+    datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
+                                                              VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
+    (x_train, y_train) = datasets[0]
+    (x_val, y_val) = datasets[1]
+    test_set = datasets[2]
     if SHOULD_RUN_NN:
-        curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE)
+        curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE, test_set)
         if SHOULD_LOAD_MODEL_FROM_FILE:
             curr_nn_manager.model = load_model(curr_nn_manager.get_path_for_saving_model())
         elif SHOULD_HYPERTUNE:
