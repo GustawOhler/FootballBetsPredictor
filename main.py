@@ -8,6 +8,7 @@ from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, S
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.dataset_manager import get_splitted_dataset, get_whole_dataset
+from nn_manager.k_fold_validator import perform_k_fold_with_different_parameters, perform_standard_k_fold
 from nn_manager.nn_choose_bets_menager import NNChoosingBetsManager
 from nn_manager.nn_pred_matches_manager import NNPredictingMatchesManager
 from nn_manager.common import load_model
@@ -20,6 +21,8 @@ from nn_manager.lstm_nn_choose_bets_manager import LstmNNChoosingBetsManager
 from nn_manager.gru_nn_pred_matches_manager import GruNNPredictingMatchesManager
 from nn_manager.lstm_nn_pred_matches_manager import LstmNNPredictingMatchesManager
 from nn_manager.recurrent_nn_pred_matches_manager import RecurrentNNPredictingMatchesManager
+
+
 
 setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
@@ -35,33 +38,13 @@ if NEED_TO_PROCESS_CSV:
 
 if PERFORM_K_FOLD:
     X, y = get_whole_dataset(NEED_TO_CREATE_DATASET)
-    k_folder = KFold(n_splits=10, shuffle=True)
-    metrics = []
-    metrics_names = []
-    loop_index = 1
-    for train_index, val_index in k_folder.split(y):
-        print("Rozpoczynam uczenie modelu nr " + str(loop_index), end="\r")
-        loop_index += 1
-        if is_model_rnn:
-            X_train, X_val = [X[i][train_index] for i in range(len(X))], [X[i][val_index] for i in range(len(X))]
-        else:
-            X_train, X_val = X[train_index], X[val_index]
-        y_train, y_val = y[train_index], y[val_index]
-        curr_nn_manager = (globals()[curr_nn_manager_name])((X_train, y_train), (X_val, y_val), False)
-        curr_nn_manager.perform_model_learning(verbose=False)
-        metrics.append(curr_nn_manager.model.evaluate(X_val, y_val, verbose=1))
-        if len(metrics_names) == 0:
-            metrics_names = curr_nn_manager.model.metrics_names
-    mean_metrics = np.asarray(metrics).mean(axis=0)
-    print("Srednie wyniki dla modelu: ")
-    for i, name in enumerate(metrics_names):
-        print(name + ": " + str(mean_metrics[i]))
+    perform_standard_k_fold(X, y, globals()[curr_nn_manager_name])
 else:
     datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
                                                               VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
     (x_train, y_train) = datasets[0]
     (x_val, y_val) = datasets[1]
-    test_set = datasets[2]
+    test_set = datasets[2] if TEST_TO_VALIDATION_SPLIT_RATIO > 0 else None
     if SHOULD_RUN_NN:
         curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE, test_set)
         if SHOULD_LOAD_MODEL_FROM_FILE:

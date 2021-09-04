@@ -4,6 +4,7 @@ dataset.csv
 NN_full_model/
 NN_model_weights/
 best_yet_NN_full_model/
+hypertuning/
 *.csv
 *.png
 
