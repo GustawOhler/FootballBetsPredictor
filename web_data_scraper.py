@@ -3,8 +3,8 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 import urllib.request
 import os.path
 
-WANTED_COUNTRIES = ['england', 'germany', 'italy', 'spain', 'france', 'portugal', 'netherlands']
-SEASON_TO_DOWNLOAD_COUNT = 10
+WANTED_COUNTRIES = ['england', 'germany', 'italy', 'spain', 'france', 'portugal', 'netherlands', 'turkey', 'greece']
+SEASON_TO_DOWNLOAD_COUNT = 11
 
 
 def download_data_from_web(download_to_path):

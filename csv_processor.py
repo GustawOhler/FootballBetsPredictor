@@ -1,6 +1,9 @@
 from enum import Enum
 from typing import List, Tuple
 from collections import Counter
+
+import numpy as np
+import pandas
 import pandas as pd
 from datetime import datetime, timedelta
 from peewee import fn
@@ -38,6 +41,9 @@ tie_breaker_dict = {
     'Bundesliga': TieBreakerType.GOALS_THEN_H2H,
     'Championship': TieBreakerType.GOALS_THEN_H2H,
     '2. Bundesliga': TieBreakerType.GOALS_THEN_H2H,
+    'Super Lig': TieBreakerType.H2H_THEN_GOALS,
+    'Superleague Ellada': TieBreakerType.H2H_THEN_GOALS,
+    'Jupiler League': TieBreakerType.H2H_THEN_GOALS
 }
 
 league_name_dict = {
@@ -53,7 +59,9 @@ league_name_dict = {
     "I2": lambda: League.get_or_create(league_name='Serie B', defaults={'country': 'IT', 'division': 2}),
     "N1": lambda: League.get_or_create(league_name='Eredivisie', defaults={'country': 'NL', 'division': 1}),
     "B1": lambda: League.get_or_create(league_name='Jupiler League', defaults={'country': 'BE', 'division': 1}),
-    "P1": lambda: League.get_or_create(league_name='Primeira Liga', defaults={'country': 'PT', 'division': 1})
+    "P1": lambda: League.get_or_create(league_name='Primeira Liga', defaults={'country': 'PT', 'division': 1}),
+    "G1": lambda: League.get_or_create(league_name='Superleague Ellada', defaults={'country': 'GR', 'division': 1}),
+    "T1": lambda: League.get_or_create(league_name='Super Lig', defaults={'country': 'TR', 'division': 1})
 }
 
 
@@ -163,8 +171,14 @@ def table_creation(season, date, league):
         sorted_team.position = index + 1
         bulk_dictionary.append(sorted_team.__data__)
     TableTeam.insert_many(bulk_dictionary).execute()
-    
-    
+
+
+def get_if_key_exists(single_row: pandas.Series, key, columns, default_value = None):
+    if key in columns:
+        return single_row[key]
+    return default_value
+
+
 def save_match(season: Season, league: League, matches_data: pd.DataFrame):
     numeric_columns = matches_data.select_dtypes('number').columns
     matches_data.loc[:, numeric_columns] = matches_data.loc[:, numeric_columns].fillna(0)
@@ -192,7 +206,7 @@ def save_match(season: Season, league: League, matches_data: pd.DataFrame):
             'home_team_shots_on_target': single_match_row["HST"],
             'home_team_woodwork_hits': single_match_row["HHW"] if 'HHW' in matches_data.columns else None,
             'home_team_corners': single_match_row["HC"],
-            'home_team_fouls_committed': single_match_row["HF"],
+            'home_team_fouls_committed': get_if_key_exists(single_match_row, "HF", matches_data.columns),
             'home_team_free_kicks_conceded': single_match_row["HFKC"] if 'HFKC' in matches_data.columns else None,
             'home_team_offsides': single_match_row["HO"] if 'HO' in matches_data.columns else None,
             'home_team_yellow_cards': single_match_row["HY"],
@@ -201,7 +215,7 @@ def save_match(season: Season, league: League, matches_data: pd.DataFrame):
             'away_team_shots_on_target': single_match_row["AST"],
             'away_team_woodwork_hits': single_match_row["AHW"] if 'AHW' in matches_data.columns else None,
             'away_team_corners': single_match_row["AC"],
-            'away_team_fouls_committed': single_match_row["AF"],
+            'away_team_fouls_committed': get_if_key_exists(single_match_row, "AF", matches_data.columns),
             'away_team_free_kicks_conceded': single_match_row["AFKC"] if 'AFKC' in matches_data.columns else None,
             'away_team_offsides': single_match_row["AO"] if 'AO' in matches_data.columns else None,
             'away_team_yellow_cards': single_match_row["AY"],
@@ -242,7 +256,7 @@ def save_league_data_to_db(matches_data):
                                                                   'end_date': league_end_date})
 
     if is_season_created:
-        for team_name in matches_data["HomeTeam"].unique():
+        for team_name in np.unique(np.concatenate((matches_data["HomeTeam"].unique(), matches_data["AwayTeam"].unique()))):
             team_tuple = Team.get_or_create(name=team_name)
             TeamSeason.create(team=team_tuple[0], season=db_season)
 
@@ -273,9 +287,9 @@ def save_league_data_to_db(matches_data):
 
                 home_team_alias = Team.alias()
                 away_team_alias = Team.alias()
-                query = Match.select(Match, home_team_alias, away_team_alias)\
-                    .join(home_team_alias, on=Match.home_team)\
-                    .switch(Match).join(away_team_alias, on=Match.away_team)\
+                query = Match.select(Match, home_team_alias, away_team_alias) \
+                    .join(home_team_alias, on=Match.home_team) \
+                    .switch(Match).join(away_team_alias, on=Match.away_team) \
                     .where((Match.date == match_date) & (home_team_alias.name == single_match_row["HomeTeam"]) &
                            (away_team_alias.name == single_match_row["AwayTeam"]))
                 if not query.exists():
@@ -283,7 +297,6 @@ def save_league_data_to_db(matches_data):
             save_match(db_season, db_league, matches_data.iloc[match_to_save_indexes])
             # Table for the end of the season
             table_creation(db_season, league_end_date + timedelta(days=1), db_league)
-            
 
 
 def process_csv_and_save_to_db(csv_file_path):

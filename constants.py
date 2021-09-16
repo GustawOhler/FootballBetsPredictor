@@ -1,10 +1,12 @@
 # region dataset_manager
-from enum import Enum
+from enum import Enum, IntEnum
+
 
 class DatasetType(Enum):
     BASIC = 'BasicDatasetCreator'
     AGGREGATED_MATCHES = 'DatasetWithAggregatedMatchesCreator'
     SEPARATED_MATCHES = 'DatasetWithSeparatedMatchesCreator'
+
 
 class ModelType(Enum):
     PREDICTING_MATCHES = 'NNPredictingMatchesManager'
@@ -17,15 +19,34 @@ class ModelType(Enum):
     RNN_pred_matches = 'RecurrentNNPredictingMatchesManager'
     LSTM_pred_matches = 'LstmNNPredictingMatchesManager'
 
+
+class ChoosingBetsStrategy(Enum):
+    AllOnBestResult = 'AllOnBestResult'
+    BetOnBestResultWithRetProb = 'BetOnBestResultWithRetProb'
+    MalafosseUnlessNoBet = 'MalafosseUnlessNoBet'
+    OriginalMalafosse = 'OriginalMalafosse'
+
+
+class PredMatchesStrategy(Enum):
+    AllOnBestOverThreshold = 'AllOnBestOverThreshold'
+    AllOnBiggestDifferenceOverThreshold = 'AllOnBiggestDifferenceOverThreshold'
+    RelativeOnBestOverThreshold = 'RelativeOnBestOverThreshold'
+    RelativeOnBiggestDifferenceOverThreshold = 'RelativeOnBiggestDifferenceOverThreshold'
+    RelativeOnResultsOverThreshold = 'RelativeOnResultsOverThreshold'
+    KellyCriterion = 'KellyCriterion'
+
+
 ids_path = 'dataset_manager/datasets/match_ids'
 base_dataset_path = 'dataset_manager/datasets/'
-curr_dataset_name = DatasetType.SEPARATED_MATCHES.value
+curr_dataset = DatasetType.SEPARATED_MATCHES
+curr_dataset_name = curr_dataset.value
 dataset_path = 'dataset_manager/datasets/' + curr_dataset_name
 dataset_ext = '.csv'
 dataset_with_ext = dataset_path + dataset_ext
 # endregion
 # region neural_network_manager
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # if not "KERASTUNER_TUNER_ID" in os.environ:
 #     os.environ["KERASTUNER_TUNER_ID"] = "chief"
@@ -35,7 +56,7 @@ saved_model_based_path = "./NN_full_model/"
 saved_model_weights_base_path = "./NN_model_weights/"
 # confidence_threshold = 0.03
 results_to_description_dict = {0: 'Wygrana gospodarzy', 1: 'Remis', 2: 'Wygrana gości', 3: 'Brak zakładu'}
-curr_nn_manager_name = ModelType.RNN.value
+curr_nn_manager_name = ModelType.RNN_pred_matches.value
 is_model_rnn = curr_nn_manager_name in [ModelType.RNN.value, ModelType.GRU.value, ModelType.LSTM.value, ModelType.GRU_pred_matches.value,
                                         ModelType.RNN_pred_matches.value, ModelType.LSTM_pred_matches.value]
 # endregion
@@ -49,7 +70,7 @@ NEED_TO_PROCESS_CSV = False
 SHOULD_RUN_NN = True
 SHOULD_CREATE_NEW_SPLIT = False
 SPLIT_MATCHES_BY_QUERY = False
-PERFORM_K_FOLD = True
+PERFORM_K_FOLD = False
 TAKE_MATCHES_FROM_QUERY = True
 SHOULD_HYPERTUNE = False
 CSV_FOLDER_PATH = '.\\MatchesData\\AutomatedDownloads'
