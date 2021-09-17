@@ -40,10 +40,10 @@ if PERFORM_K_FOLD:
     # X, y = get_whole_dataset(NEED_TO_CREATE_DATASET)
     # perform_standard_k_fold(X, y, globals()[curr_nn_manager_name])
     # tracked_metrics = perform_k_fold_with_different_datasets(globals()[curr_nn_manager_name])
-    # tracked_metrics = perform_k_fold_with_different_models()
+    tracked_metrics = perform_k_fold_with_different_models()
     # tracked_metrics = perform_k_fold_on_expotential(globals()[curr_nn_manager_name], get_whole_dataset(False))
-    tracked_metrics = perform_k_fold_for_different_strategies(globals()[curr_nn_manager_name], get_whole_dataset(False), is_model_rnn, False)
-    print_results_to_csv(tracked_metrics, 'final_results/strategy_comparison_predicting_matches.csv')
+    # tracked_metrics = perform_k_fold_for_different_strategies(globals()[curr_nn_manager_name], get_whole_dataset(False), is_model_rnn, False)
+    print_results_to_csv(tracked_metrics, 'final_results/approach_comparison1.csv')
 else:
     datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
                                                               VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
@@ -59,5 +59,6 @@ else:
         else:
             curr_nn_manager.perform_model_learning(verbose=True)
             curr_nn_manager.evaluate_model()
+            curr_nn_manager.plot_confidence_threshold()
             # curr_nn_manager.get_best_strategies_value()
             # curr_nn_manager.model.evaluate(test_set[0], test_set[1], batch_size=test_set[1].shape[0])
