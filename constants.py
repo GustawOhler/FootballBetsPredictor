@@ -65,16 +65,15 @@ class NNRunType(IntEnum):
     Research = 2
     HyperTuning = 3
     BestModelEvaluation = 4
-CURRENT_NN_RUN_TYPE = NNRunType.Learning
+CURRENT_NN_RUN_TYPE = NNRunType.BestModelEvaluation
 print("Wybierz tryb działania sieci neuronowej. Wciśnij:\n"
-      "1 - Uczenie nowej sieci neuronowej\n"
-      "2 - Ewaluacja najlepszego modelu\n"
-      "3 - Wykorzystanie obecnych ustawień z kodu")
+      "1 - Ewaluacja najlepszego modelu\n"
+      "2 - Uczenie nowej sieci neuronowej")
 pressed_key = keyboard.read_key()
 if pressed_key == '1':
-    CURRENT_NN_RUN_TYPE = NNRunType.Learning
-elif pressed_key == '2':
     CURRENT_NN_RUN_TYPE = NNRunType.BestModelEvaluation
+elif pressed_key == '2':
+    CURRENT_NN_RUN_TYPE = NNRunType.Learning
 NEED_TO_DROP_TABLES = False
 SHOULD_LOG = False
 NEED_TO_CREATE_DATASET = False
