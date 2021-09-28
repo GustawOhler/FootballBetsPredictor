@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, NEED_TO_PROCESS_CSV, \
     SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, is_model_rnn, \
-    TEST_TO_VALIDATION_SPLIT_RATIO, curr_dataset,CURRENT_NN_RUN_TYPE, NNRunType
+    TEST_TO_VALIDATION_SPLIT_RATIO, curr_dataset, CURRENT_NN_RUN_TYPE, NNRunType, SHOULD_CONNECT_WITH_DB
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.class_definitions import DatasetSplit
@@ -23,8 +23,8 @@ from nn_manager.recurrent_nn_choose_bets_manager import RecurrentNNChoosingBetsM
 from nn_manager.recurrent_nn_pred_matches_manager import RecurrentNNPredictingMatchesManager
 
 
-
-setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
+if SHOULD_CONNECT_WITH_DB:
+    setup_db(SHOULD_LOG, NEED_TO_DROP_TABLES)
 if SHOULD_DOWNLOAD_DATA:
     web_data_scraper.download_data_from_web(CSV_FOLDER_PATH)
 if NEED_TO_PROCESS_CSV:
