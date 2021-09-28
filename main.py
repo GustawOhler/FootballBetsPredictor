@@ -3,9 +3,9 @@ from os import listdir
 from os.path import isfile, join
 import numpy as np
 from sklearn.model_selection import KFold
-from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, SHOULD_LOAD_MODEL_FROM_FILE, NEED_TO_PROCESS_CSV, \
-    SHOULD_RUN_NN, SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, PERFORM_K_FOLD, is_model_rnn, \
-    SHOULD_HYPERTUNE, TEST_TO_VALIDATION_SPLIT_RATIO, curr_dataset, PERFORM_RESEARCH
+from constants import NEED_TO_DROP_TABLES, SHOULD_LOG, NEED_TO_CREATE_DATASET, SHOULD_DOWNLOAD_DATA, NEED_TO_PROCESS_CSV, \
+    SHOULD_CREATE_NEW_SPLIT, CSV_FOLDER_PATH, VALIDATION_TO_TRAIN_SPLIT_RATIO, curr_nn_manager_name, is_model_rnn, \
+    TEST_TO_VALIDATION_SPLIT_RATIO, curr_dataset,CURRENT_NN_RUN_TYPE, NNRunType
 from csv_processor import process_csv_and_save_to_db
 from database_helper import setup_db
 from dataset_manager.class_definitions import DatasetSplit
@@ -20,10 +20,6 @@ from nn_manager.common import load_model, plot_profit_for_thesis
 import web_data_scraper
 from timeit import default_timer as timer
 from nn_manager.recurrent_nn_choose_bets_manager import RecurrentNNChoosingBetsManager
-from nn_manager.gru_nn_choose_bets_manager import GruNNChoosingBetsManager
-from nn_manager.lstm_nn_choose_bets_manager import LstmNNChoosingBetsManager
-from nn_manager.gru_nn_pred_matches_manager import GruNNPredictingMatchesManager
-from nn_manager.lstm_nn_pred_matches_manager import LstmNNPredictingMatchesManager
 from nn_manager.recurrent_nn_pred_matches_manager import RecurrentNNPredictingMatchesManager
 
 
@@ -40,43 +36,25 @@ if NEED_TO_PROCESS_CSV:
         end = timer()
         print("Execution time: " + str(end-start))
 
-if PERFORM_K_FOLD:
-    # X, y = get_whole_dataset(NEED_TO_CREATE_DATASET)
-    # perform_standard_k_fold(X, y, globals()[curr_nn_manager_name])
-    # tracked_metrics = perform_k_fold_with_different_datasets(globals()[curr_nn_manager_name])
-    # tracked_metrics = perform_test_check_on_last_2()
-    # tracked_metrics = perform_k_fold_on_expotential(globals()[curr_nn_manager_name], get_whole_dataset(False))
-    # tracked_metrics = perform_k_fold_for_different_strategies(globals()[curr_nn_manager_name], get_whole_dataset(False), is_model_rnn, False)
-    # print_results_to_csv(tracked_metrics, f'final_results/comparision{datetime.datetime.now().timestamp()}.csv')
-    search_for_best_configuration(get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
-                                                              VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO))
-elif PERFORM_RESEARCH:
-    datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
-                                    VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
-    (x_train, y_train) = datasets[0]
-    (x_val, y_val) = datasets[1]
-    test_set = datasets[2] if TEST_TO_VALIDATION_SPLIT_RATIO > 0 else None
-    curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE, test_set, True)
+datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
+                                                              VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
+(x_train, y_train) = datasets[0]
+(x_val, y_val) = datasets[1]
+test_set = datasets[2] if TEST_TO_VALIDATION_SPLIT_RATIO > 0 else None
+
+if CURRENT_NN_RUN_TYPE == NNRunType.KFold:
+    search_for_best_configuration(datasets)
+elif CURRENT_NN_RUN_TYPE == NNRunType.Research:
+    curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), False, test_set, True)
     researcher = BestModelResearcher(curr_nn_manager.model, get_already_splitted_raw_dataset(DatasetSplit.TEST), test_set)
     researcher.perform_full_research()
-    # profits = researcher.get_profit_chronologically()
-else:
-    datasets = get_splitted_dataset(NEED_TO_CREATE_DATASET, SHOULD_CREATE_NEW_SPLIT,
-                                                              VALIDATION_TO_TRAIN_SPLIT_RATIO, TEST_TO_VALIDATION_SPLIT_RATIO)
-    (x_train, y_train) = datasets[0]
-    (x_val, y_val) = datasets[1]
-    test_set = datasets[2] if TEST_TO_VALIDATION_SPLIT_RATIO > 0 else None
-    if SHOULD_RUN_NN:
-        curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), SHOULD_HYPERTUNE, test_set, True)
-        if SHOULD_LOAD_MODEL_FROM_FILE:
-            # curr_nn_manager.model = load_model(curr_nn_manager.get_path_for_saving_model())
-            curr_nn_manager.evaluate_model(False)
-        elif SHOULD_HYPERTUNE:
-            tuned = curr_nn_manager.hyper_tune_model()
-        else:
-            curr_nn_manager.perform_model_learning(verbose=True)
-            curr_nn_manager.evaluate_model()
-            # plot_profit_for_thesis(curr_nn_manager.history)
-            # curr_nn_manager.plot_confidence_threshold()
-            # curr_nn_manager.get_best_strategies_value()
-            # curr_nn_manager.model.evaluate(test_set[0], test_set[1], batch_size=test_set[1].shape[0])
+elif CURRENT_NN_RUN_TYPE == NNRunType.BestModelEvaluation:
+    curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), False, test_set, True)
+    curr_nn_manager.evaluate_model(False)
+elif CURRENT_NN_RUN_TYPE == NNRunType.HyperTuning:
+    curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), True, test_set, False)
+    tuned = curr_nn_manager.hyper_tune_model()
+elif CURRENT_NN_RUN_TYPE == NNRunType.Learning:
+    curr_nn_manager = (globals()[curr_nn_manager_name])((x_train, y_train), (x_val, y_val), False, test_set, False)
+    curr_nn_manager.perform_model_learning(verbose=True)
+    curr_nn_manager.evaluate_model()
